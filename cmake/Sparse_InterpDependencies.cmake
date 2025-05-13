@@ -28,7 +28,14 @@ if(NOT TARGET Eigen3::Eigen)
   set(ENV{EIGEN3_INCLUDE_DIR} "${SPARSE_EXTERNAL}/eigen/")
 endif()
 
-
+# Add polyscope
+function(sparse_interp_download_polyscope)
+  sparse_interp_download_project(polyscope
+    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
+    GIT_TAG        v1.3.0
+    CMAKE_ARGS     -DCMAKE_INSTALL_PREFIX=${SPARSE_EXTERNAL}/polyscope
+  )
+endfunction()
 
 
 
