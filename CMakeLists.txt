@@ -1,13 +1,29 @@
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.10...3.27)
 project(Sparse_Interp)
 
+# Add safety checks for directories
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app")
+    message(FATAL_ERROR "Required directory 'app' does not exist!")
+endif()
 
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app/meshes")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/app/meshes")
+endif()
+
+# Create build directories
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
+
+# Ensure mesh directory path is valid and exists
+set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/app/meshes")
+if(NOT IS_DIRECTORY ${MESH_DIR})
+    message(FATAL_ERROR "Mesh directory ${MESH_DIR} does not exist!")
+endif()
+
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 ################################################################################
 
 # project-options
-
-
 
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY     "Use libigl as static library" OFF)
@@ -34,9 +50,11 @@ option(LIBIGL_WITH_PREDICATES        "Use exact predicates"         ON)
 
 ### Configuration
 set(SPARSE_EXTERNAL "${CMAKE_CURRENT_SOURCE_DIR}/external")
+set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
+set(SPARSE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/sparse_interp)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 list(APPEND CMAKE_MODULE_PATH ${THIRD_PARTY_DIR}/Catch2/contrib)
-set(SPARSE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/sparse_interp)
 
 include(Warnings)
 include(UseColors)
@@ -50,7 +68,7 @@ igl_include(opengl)
 igl_include(glfw)
 igl_include(restricted triangle)
 
-add_subdirectory(${SPARSE_EXTERNAL}/openmesh/OpenMesh-9.0.0)
+add_subdirectory(${SPARSE_EXTERNAL}/openmesh/OpenMesh-11.0.0)
 ############################
 # B spline library.
 # igl -> splines
@@ -59,21 +77,12 @@ prepend_current_path(SPLINE_SOURCES)
 SI_copy_headers(${SPLINE_SOURCES})
 SI_set_source_group(${SPLINE_SOURCES})  
 add_library(splines ${SPLINE_SOURCES})
+#target_sources(splines PRIVATE ${SPLINE_SOURCES})
 target_include_directories(splines PUBLIC ${PROJECT_BINARY_DIR}/include)
-target_link_libraries(splines 
-  PUBLIC 
-    igl::core 
-    igl::predicates 
-    igl::opengl 
-    igl::glfw 
-    igl_restricted::triangle 
-    Eigen3::Eigen 
-    OpenMeshCore 
-    OpenMeshTools
-    polyscope::polyscope
-)
+target_link_libraries(splines PUBLIC igl::core igl::predicates igl::opengl igl::glfw igl_restricted::triangle Eigen3::Eigen OpenMeshCore OpenMeshTools)
 target_compile_definitions(splines PUBLIC
-    SI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/app/meshes/")
+    SI_MESH_DIR="${MESH_DIR}/")
+target_compile_options(splines PRIVATE -g)
 ###############################
 
 # the comparison methods
@@ -82,12 +91,9 @@ add_library(compare  ${COMPARE_SOURCES})
 SI_copy_headers(${COMPARE_SOURCES})
 target_include_directories(compare PUBLIC ${PROJECT_BINARY_DIR}/include)
 target_link_libraries(compare PUBLIC splines)
-
-
-
+target_compile_options(compare PRIVATE -g)
 
 ################################
-
 
 add_executable(${PROJECT_NAME}_bin
     app/main.cpp 
@@ -96,19 +102,13 @@ add_executable(${PROJECT_NAME}_bin
 target_include_directories(${PROJECT_NAME}_bin PUBLIC ${PROJECT_BINARY_DIR}/include)
 target_link_libraries(${PROJECT_NAME}_bin PUBLIC splines igl::core igl::opengl igl::glfw)
 target_link_libraries(${PROJECT_NAME}_bin PUBLIC compare)
+target_compile_options(${PROJECT_NAME}_bin PRIVATE -g)
 
 add_executable(example_bin
     app/example.cpp
   )
 target_include_directories(example_bin PUBLIC ${PROJECT_BINARY_DIR}/include)
 target_link_libraries(example_bin PUBLIC splines igl::core)
-
-# Project GUI
-
-add_executable(${PROJECT_NAME}_GUI
-    src/main.cpp
-  )
-
 
 
 

@@ -28,14 +28,7 @@ if(NOT TARGET Eigen3::Eigen)
   set(ENV{EIGEN3_INCLUDE_DIR} "${SPARSE_EXTERNAL}/eigen/")
 endif()
 
-# Add polyscope
-function(sparse_interp_download_polyscope)
-  sparse_interp_download_project(polyscope
-    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
-    GIT_TAG        v1.3.0
-    CMAKE_ARGS     -DCMAKE_INSTALL_PREFIX=${SPARSE_EXTERNAL}/polyscope
-  )
-endfunction()
+
 
 
 
@@ -55,7 +48,7 @@ include(FetchContent)
 FetchContent_Declare(
     libigl
     GIT_REPOSITORY https://github.com/libigl/libigl.git
-    GIT_TAG v2.5.0
+    GIT_TAG v2.6.0
 )
 FetchContent_MakeAvailable(libigl)
 endif()
@@ -67,7 +60,7 @@ if(EXISTS "${OM_FILE}" OR EXISTS "${OM_PATH}")
 else()
   if(NOT EXISTS "${OM_FILE}")
     message("LSC: downloading OpenMesh")
-    file(DOWNLOAD https://www.graphics.rwth-aachen.de/media/openmesh_static/Releases/9.0/OpenMesh-9.0.zip ${OM_FILE})
+    file(DOWNLOAD https://www.graphics.rwth-aachen.de/media/openmesh_static/Releases/11.0/OpenMesh-11.0.0.zip ${OM_FILE})
   endif()
 endif()
 if(NOT EXISTS "${OM_PATH}")
@@ -77,5 +70,5 @@ if(NOT EXISTS "${OM_PATH}")
 else()
     message("LSC: OpenMesh is already unzipped")
 endif()
-message("LSC: OpenMesh file: ${OM_PATH}/OpenMesh-9.0.0/")
+message("LSC: OpenMesh file: ${OM_PATH}/OpenMesh-11.0.0/")
 
