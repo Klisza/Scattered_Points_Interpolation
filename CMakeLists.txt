@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10 )
+cmake_minimum_required(VERSION 3.10)
 project(Sparse_Interp)
 
 
@@ -121,6 +121,8 @@ target_link_libraries(example_bin
 add_executable(surfGui_bin
     src/main.cpp
 )
+
+add_library(polyscope::polyscope ALIAS polyscope)
 
 target_link_libraries(surfGui_bin 
     PUBLIC
