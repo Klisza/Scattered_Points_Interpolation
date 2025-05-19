@@ -9,7 +9,7 @@
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR})
 list(REMOVE_DUPLICATES CMAKE_MODULE_PATH)
 include(${PROJECT_NAME}DownloadExternal)
-include(patch)
+include(polyscope_patcher)
 include(FetchContent)
 
 ################################################################################
@@ -47,16 +47,7 @@ if(NOT TARGET igl::core)
         GIT_TAG v2.6.0
     )
 endif()
-# Patch target clash with polyscope
-FetchContent_GetProperties(libigl)
-if (NOT libigl_POPULATED)
-    FetchContent_Populate(libigl)
-
-    # rename libigl’s embedded glad/glfw
-    #patch_dep(glad   libigl_glad   "${libigl_SOURCE_DIR}/cmake/recipes/external/glad.cmake")
-    #patch_dep(glfw   libigl_glfw   "${libigl_SOURCE_DIR}/cmake/recipes/external/glfw.cmake")
-endif()
-add_subdirectory(${libigl_SOURCE_DIR} ${libigl_BINARY_DIR})
+FetchContent_MakeAvailable(libigl)
 
 # Polyscope
 if(NOT TARGET polyscope::polyscope)
@@ -70,8 +61,8 @@ endif()
 FetchContent_GetProperties(polyscope)
 if (NOT polyscope_POPULATED)
   FetchContent_Populate(polyscope)
-  #patch_dep(glad polyscope_glad "${polyscope_SOURCE_DIR}/deps/glad/src")
-  #patch_dep(glfw polyscope_glfw "${polyscope_SOURCE_DIR}/deps/glfw/src")
+  patch_poly(glad polyscope_glad "${polyscope_SOURCE_DIR}/deps/glad/src")
+  patch_poly(glfw polyscope_glfw "${polyscope_SOURCE_DIR}/deps/glfw/src")
 endif()
 add_subdirectory(${polyscope_SOURCE_DIR} ${polyscope_BINARY_DIR})
 
