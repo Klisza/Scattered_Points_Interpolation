@@ -9,6 +9,8 @@
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR})
 list(REMOVE_DUPLICATES CMAKE_MODULE_PATH)
 include(${PROJECT_NAME}DownloadExternal)
+include(patch)
+include(FetchContent)
 
 ################################################################################
 # Required libraries
@@ -29,11 +31,6 @@ if(NOT TARGET Eigen3::Eigen)
 endif()
 
 
-
-
-
-
-
   # libigl for timing
 # if(NOT TARGET igl::core)
 #   # sparse_interp_download_libigl()
@@ -44,14 +41,41 @@ endif()
   
 #   endif()
 if(NOT TARGET igl::core)
-include(FetchContent)
-FetchContent_Declare(
-    libigl
-    GIT_REPOSITORY https://github.com/libigl/libigl.git
-    GIT_TAG v2.6.0
-)
-FetchContent_MakeAvailable(libigl)
+    FetchContent_Declare(
+        libigl
+        GIT_REPOSITORY https://github.com/libigl/libigl.git
+        GIT_TAG v2.6.0
+    )
 endif()
+# Patch target clash with polyscope
+FetchContent_GetProperties(libigl)
+if (NOT libigl_POPULATED)
+    FetchContent_Populate(libigl)
+
+    # rename libigl’s embedded glad/glfw
+    #patch_dep(glad   libigl_glad   "${libigl_SOURCE_DIR}/cmake/recipes/external/glad.cmake")
+    #patch_dep(glfw   libigl_glfw   "${libigl_SOURCE_DIR}/cmake/recipes/external/glfw.cmake")
+endif()
+add_subdirectory(${libigl_SOURCE_DIR} ${libigl_BINARY_DIR})
+
+# Polyscope
+if(NOT TARGET polyscope::polyscope)
+    FetchContent_Declare(
+        polyscope
+        GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
+        GIT_TAG v2.4.0
+    )
+endif()
+# Patch target clash with libigl
+FetchContent_GetProperties(polyscope)
+if (NOT polyscope_POPULATED)
+  FetchContent_Populate(polyscope)
+  #patch_dep(glad polyscope_glad "${polyscope_SOURCE_DIR}/deps/glad/src")
+  #patch_dep(glfw polyscope_glfw "${polyscope_SOURCE_DIR}/deps/glfw/src")
+endif()
+add_subdirectory(${polyscope_SOURCE_DIR} ${polyscope_BINARY_DIR})
+
+
 # install openmesh
 set(OM_FILE "${CMAKE_CURRENT_SOURCE_DIR}/external/openmesh.zip")
 set(OM_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/openmesh" )

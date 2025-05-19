@@ -1,29 +1,8 @@
-cmake_minimum_required(VERSION 3.10...3.27)
+cmake_minimum_required(VERSION 3.10 )
 project(Sparse_Interp)
 
-# Add safety checks for directories
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app")
-    message(FATAL_ERROR "Required directory 'app' does not exist!")
-endif()
-
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app/meshes")
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/app/meshes")
-endif()
-
-# Create build directories
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
-
-# Ensure mesh directory path is valid and exists
-set(MESH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/app/meshes")
-if(NOT IS_DIRECTORY ${MESH_DIR})
-    message(FATAL_ERROR "Mesh directory ${MESH_DIR} does not exist!")
-endif()
-
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 ################################################################################
-
-# project-options
 
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY     "Use libigl as static library" OFF)
@@ -36,7 +15,10 @@ option(LIBIGL_WITH_LIM               "Use LIM"                      OFF)
 option(LIBIGL_WITH_MATLAB            "Use Matlab"                   OFF)
 option(LIBIGL_WITH_MOSEK             "Use MOSEK"                    OFF)
 option(LIBIGL_WITH_OPENGL            "Use OpenGL"                   ON)
-option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"                     ON)
+set(LIBIGL_WITH_OPENGL OFF CACHE BOOL "" FORCE)
+set(LIBIGL_WITH_OPENGL_GLFW OFF CACHE BOOL "" FORCE)
+set(LIBIGL_WITH_GLAD OFF CACHE BOOL "" FORCE)
+set(LIBIGL_WITH_OPENGL_GLFW_IMGUI OFF CACHE BOOL "" FORCE)
 option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"                    OFF)
 option(LIBIGL_WITH_PNG               "Use PNG"                      OFF)
 option(LIBIGL_WITH_PYTHON            "Use Python"                   OFF)
@@ -61,7 +43,6 @@ include(UseColors)
 include(${PROJECT_NAME}Dependencies)
 include(PrependCurrentPath)
 include(Sparse_InterpUtils)
-
 igl_include(core)
 igl_include(predicates)
 igl_include(opengl)
@@ -69,6 +50,13 @@ igl_include(glfw)
 igl_include(restricted triangle)
 
 add_subdirectory(${SPARSE_EXTERNAL}/openmesh/OpenMesh-11.0.0)
+
+# Rename glad and glfw, for readability and standard
+#add_library(igl::glad       ALIAS glad)#libigl_glad)
+#add_library(igl::glfw       ALIAS glfw)#libigl_glfw)
+#add_library(polyscope::glad ALIAS polyscope_glad)
+#add_library(polyscope::glfw ALIAS polyscope_glfw)
+
 ############################
 # B spline library.
 # igl -> splines
@@ -79,7 +67,16 @@ SI_set_source_group(${SPLINE_SOURCES})
 add_library(splines ${SPLINE_SOURCES})
 #target_sources(splines PRIVATE ${SPLINE_SOURCES})
 target_include_directories(splines PUBLIC ${PROJECT_BINARY_DIR}/include)
-target_link_libraries(splines PUBLIC igl::core igl::predicates igl::opengl igl::glfw igl_restricted::triangle Eigen3::Eigen OpenMeshCore OpenMeshTools)
+target_link_libraries(splines PUBLIC
+    igl::core 
+    igl::predicates 
+    igl::opengl 
+    igl::glfw 
+    igl_restricted::triangle 
+    Eigen3::Eigen 
+    OpenMeshCore 
+    OpenMeshTools
+)
 target_compile_definitions(splines PUBLIC
     SI_MESH_DIR="${MESH_DIR}/")
 target_compile_options(splines PRIVATE -g)
@@ -100,7 +97,14 @@ add_executable(${PROJECT_NAME}_bin
 	app/test.cpp
   )
 target_include_directories(${PROJECT_NAME}_bin PUBLIC ${PROJECT_BINARY_DIR}/include)
-target_link_libraries(${PROJECT_NAME}_bin PUBLIC splines igl::core igl::opengl igl::glfw)
+target_link_libraries(${PROJECT_NAME}_bin 
+    PUBLIC
+        splines 
+        igl::core 
+        igl::opengl 
+        igl::glfw
+        polyscope::polyscope
+)
 target_link_libraries(${PROJECT_NAME}_bin PUBLIC compare)
 target_compile_options(${PROJECT_NAME}_bin PRIVATE -g)
 
@@ -108,7 +112,22 @@ add_executable(example_bin
     app/example.cpp
   )
 target_include_directories(example_bin PUBLIC ${PROJECT_BINARY_DIR}/include)
-target_link_libraries(example_bin PUBLIC splines igl::core)
+target_link_libraries(example_bin 
+    PUBLIC 
+        splines 
+        igl::core
+)
 
+add_executable(surfGui_bin
+    src/main.cpp
+)
 
-
+target_link_libraries(surfGui_bin 
+    PUBLIC
+        splines 
+        igl::core 
+        igl::opengl 
+        igl::glfw
+        polyscope::polyscope
+)
+target_compile_options(surfGui_bin PRIVATE -g)
