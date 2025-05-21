@@ -88,6 +88,23 @@
         "concepts": "cpp",
         "memory_resource": "cpp",
         "stop_token": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "any": "cpp",
+        "charconv": "cpp",
+        "clocale": "cpp",
+        "codecvt": "cpp",
+        "forward_list": "cpp",
+        "source_location": "cpp",
+        "hash_map": "cpp",
+        "format": "cpp",
+        "numbers": "cpp",
+        "ranges": "cpp",
+        "semaphore": "cpp",
+        "shared_mutex": "cpp",
+        "span": "cpp",
+        "stdfloat": "cpp",
+        "text_encoding": "cpp",
+        "cinttypes": "cpp",
+        "valarray": "cpp"
     }
 }

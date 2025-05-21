@@ -15,10 +15,7 @@ option(LIBIGL_WITH_LIM               "Use LIM"                      OFF)
 option(LIBIGL_WITH_MATLAB            "Use Matlab"                   OFF)
 option(LIBIGL_WITH_MOSEK             "Use MOSEK"                    OFF)
 option(LIBIGL_WITH_OPENGL            "Use OpenGL"                   ON)
-set(LIBIGL_WITH_OPENGL OFF CACHE BOOL "" FORCE)
-set(LIBIGL_WITH_OPENGL_GLFW OFF CACHE BOOL "" FORCE)
-set(LIBIGL_WITH_GLAD OFF CACHE BOOL "" FORCE)
-set(LIBIGL_WITH_OPENGL_GLFW_IMGUI OFF CACHE BOOL "" FORCE)
+option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"                     ON)
 option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"                    OFF)
 option(LIBIGL_WITH_PNG               "Use PNG"                      OFF)
 option(LIBIGL_WITH_PYTHON            "Use Python"                   OFF)
@@ -103,7 +100,6 @@ target_link_libraries(${PROJECT_NAME}_bin
         igl::core 
         igl::opengl 
         igl::glfw
-        polyscope::polyscope
 )
 target_link_libraries(${PROJECT_NAME}_bin PUBLIC compare)
 target_compile_options(${PROJECT_NAME}_bin PRIVATE -g)
@@ -122,6 +118,7 @@ add_executable(surfGui_bin
     src/main.cpp
 )
 
+target_include_directories(surfGui_bin PUBLIC ${PROJECT_SOURCE_DIR}/app)
 add_library(polyscope::polyscope ALIAS polyscope)
 
 target_link_libraries(surfGui_bin 
