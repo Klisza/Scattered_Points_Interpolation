@@ -75,7 +75,7 @@ target_link_libraries(splines PUBLIC
     OpenMeshTools
 )
 target_compile_definitions(splines PUBLIC
-    SI_MESH_DIR="${MESH_DIR}/")
+    SI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/app/meshes/")
 target_compile_options(splines PRIVATE -g)
 ###############################
 
@@ -116,9 +116,13 @@ target_link_libraries(example_bin
 
 add_executable(surfGui_bin
     src/main.cpp
+    app/test.cpp
 )
 
-target_include_directories(surfGui_bin PUBLIC ${PROJECT_SOURCE_DIR}/app)
+target_include_directories(surfGui_bin PUBLIC 
+    ${PROJECT_SOURCE_DIR}/app
+    ${PROJECT_BINARY_DIR}/include
+)
 add_library(polyscope::polyscope ALIAS polyscope)
 
 target_link_libraries(surfGui_bin 
@@ -128,5 +132,6 @@ target_link_libraries(surfGui_bin
         igl::opengl 
         igl::glfw
         polyscope::polyscope
+        compare
 )
 target_compile_options(surfGui_bin PRIVATE -g)

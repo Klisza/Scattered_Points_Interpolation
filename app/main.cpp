@@ -61,7 +61,7 @@ void mesh_reconstruction(const std::string model, const std::string outpath) {
 	
 	std::string tail = "";
 	
-	run_mesh_reconstruction(root_path,model, par, outpath, tail, per, false);
+	run_mesh_reconstruction(root_path, model, par, outpath, tail, per, false);
 }
 
 
