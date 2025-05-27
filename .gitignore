@@ -33,4 +33,7 @@
 
 .vscode/
 build/
-external/
+app/meshes_new/
+
+external/*
+!external/TinyAD/

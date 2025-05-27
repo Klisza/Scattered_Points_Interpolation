@@ -105,6 +105,7 @@
         "stdfloat": "cpp",
         "text_encoding": "cpp",
         "cinttypes": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "csetjmp": "cpp"
     }
 }

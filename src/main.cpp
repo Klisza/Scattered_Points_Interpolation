@@ -2,6 +2,7 @@
 #include <string>
 #include <fstream>
 #include <array>
+#include <list>
 
 #include <polyscope/point_cloud.h>
 #include <polyscope/surface_mesh.h>
@@ -21,18 +22,24 @@
 #include <igl/harmonic.h>
 #include <igl/write_triangle_mesh.h>
 
+#include <Eigen/Core>
+
 
 using namespace SIBSplines;
 std::string root_path(SI_MESH_DIR);
 std::string filename;
 double sphereSize = 0.002;
 bool enablePolyGUI = true;
-double par = 0.9; // ours
-double delta = 0.4;
+double user_per = 0.5; 
+double user_delta = 0.9; // ours
+int itSteps = 10; // default
+int modelType = 0;
+int nbr_of_pts = 100;
+std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
 
 using namespace SIBSplines;
 std::string example_root_path(SI_MESH_DIR);
-void mesh_interpolation(std::string meshfile, double per, double par, int target_steps)
+void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
 {
 	double precision = 0;
 	Eigen::MatrixXd ver;
@@ -42,6 +49,7 @@ void mesh_interpolation(std::string meshfile, double per, double par, int target
 	// std::string meshfile = example_root_path + modelname;
 	std::cout << "reading mesh model: " << meshfile << std::endl;
 	// mesh parametrization, and print out the parametrization result as a obj mesh.
+  
 	mesh_parameterization(meshfile, ver, param, F);
 	paramout.resize(param.rows(), 3);
 	Eigen::VectorXd param_zero = Eigen::VectorXd::Zero(param.rows());
@@ -57,10 +65,7 @@ void mesh_interpolation(std::string meshfile, double per, double par, int target
 	surface.degree2 = 3;					// degree of v direction
 	surface.U = { {0, 0, 0, 0, 1, 1, 1, 1} }; // the initial U knot vector
 	surface.V = surface.U;					// the initial V knot vector
-	// int target_steps = 10;					// the number of iterations for constructing lists $L$.
 	bool enable_max_fix_nbr = true;			// progressively update the knot vectors to make the two knot vectors balanced in length.
-	// double delta = 0.4;						// the parameter to improve the solving stability
-	// double per = 0.5;						// the parameter inherited from [Wen-Ke Wang et al, 2008, CAD]
 	// generate knot vectors to make sure the data points can be interpolated
 	surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U, surface.V, param, delta, per, target_steps, enable_max_fix_nbr);
 	std::cout << "knot vectors generated" << std::endl;
@@ -81,24 +86,29 @@ void mesh_interpolation(std::string meshfile, double per, double par, int target
 
 	precision = surface.max_interpolation_err(ver, param, surface);
 	std::cout << "maximal interpolation error " << surface.max_interpolation_err(ver, param, surface) << std::endl;
-
-	write_points(example_root_path + "pts" + std::to_string(nbr) + "_m_" + modelname, ver);
-	write_triangle_mesh(example_root_path + "intp_" + "p" + std::to_string(nbr) + "_m_" + modelname, SPs, SFs);
+  write_points(meshfile + "pts" + std::to_string(nbr) + ".obj", ver);
+  write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", SPs, SFs);
+  Eigen::MatrixXd verticies;
+  Eigen::MatrixXi faces;
+  igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", verticies, faces);
+  polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
 }
 
 void interpCallback() {
     if (enablePolyGUI){
-      polyscope::buildPickGui();
+      //polyscope::buildPickGui();
+      polyscope::buildPolyscopeGui();
       polyscope::buildStructureGui();
     }
 
-    ImGui::SetNextWindowPos(ImVec2(10, 20), 0);
+    //  ImGui::SetNextWindowPos(ImVec2(600, 20), 0);
     // ImGui::SetNextWindowSize(ImVec2(300, 190), 0);
     ImGui::Begin("Surface Interpolation Tools",
              nullptr,
-             ImGuiWindowFlags_NoMove /*| ImGuiWindowFlags_NoResize*/ | ImGuiWindowFlags_NoCollapse /*| ImGuiWindowFlags_AlwaysAutoResize*/);
+             /*ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |*/ ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize);
   
     ImGui::Text("Mesh load options.");
+    ImGui::Checkbox("Toggle Polycsope GUI", &enablePolyGUI);
     if (ImGui::Button("Import Point Cloud")) {
       filename = igl::file_dialog_open();
       if (!filename.empty()) {
@@ -107,6 +117,8 @@ void interpCallback() {
         if (igl::readOBJ(filename, V, F)) {
           // TODO make a list of structures
           // -> array
+          //for (int i = 0; i < )
+          meshList.emplace_back(V, F);
           polyscope::PointCloud* psCloud = polyscope::registerPointCloud("mesh points", V);
           psCloud->setPointRadius(sphereSize);
           psCloud->setPointRenderMode(polyscope::PointRenderMode::Sphere);
@@ -115,26 +127,47 @@ void interpCallback() {
         }
       }
     }
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
     if (ImGui::TreeNode("Interpolation")) {
+      // Parameters
       ImGui::TextWrapped("Set parameters for interpolation.");
-      float f = static_cast<float>(par);
-      ImGui::SliderFloat("par", &f, 0, 1);
-      par = static_cast<double>(f);
+      float f1 = static_cast<float>(user_delta);
+      ImGui::SliderFloat("Par", &f1, 0, 1);
+      user_delta = static_cast<double>(f1);
+      float f2 = static_cast<float>(user_per);
+      ImGui::SliderFloat("Delta", &f2, 0, 1);
+      user_per = static_cast<double>(f2);
+      ImGui::SliderInt("Iteration Steps", &itSteps, 1, 20);
+      // Mesh calculation
       if (ImGui::Button("Interpolate Mesh")) {
         if (!filename.empty()) {
-          const std::string model_filepath = filename;
-          const std::string outpath = filename + "_interp";
-          std::string tail = "";
-          mesh_interpolation(filename, per, par);
+          mesh_interpolation(filename, user_delta, user_per, itSteps);
         } else {
           std::cerr << "No mesh loaded";
         }
       }
+      if (ImGui::TreeNode("Predefined Functions")) {
+        ImGui::SliderInt("Function Model", &modelType, 0, 5);
+        ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
+        if (ImGui::Button("Compute Function Interpolation")) {
+          run_ours(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
+          Eigen::MatrixXd verticies;
+          Eigen::MatrixXi faces;
+          std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
+          std::string model_filename = SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
+          igl::readOBJ(model_filename, verticies, faces);
+          polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface" + std::to_string(modelType), verticies, faces);
+          std::string prefix_pts = "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
+          std::string model_points = SI_MESH_DIR + prefix_pts;
+          Eigen::MatrixXd verticies_pts;
+          Eigen::MatrixXi faces_pts;
+          igl::readOBJ(model_points, verticies_pts, faces_pts);
+          polyscope::PointCloud* psPointCloud = polyscope::registerPointCloud("Model" + std::to_string(modelType), verticies_pts);
+        }
+      }
     }
-    
-    ImGui::End();
 
-    
+    ImGui::End();
   }
 
 int main(int argc, char* argv[]) {
@@ -144,9 +177,6 @@ int main(int argc, char* argv[]) {
   polyscope::options::buildGui = false;
   polyscope::init();
 
-  //run_ours();
-  // Run user callback to get the mesh
-  // TODO: Rewrite this to get the point cloud from the user instead of the triangle mesh
   polyscope::state::userCallback = interpCallback;
 
   polyscope::show();

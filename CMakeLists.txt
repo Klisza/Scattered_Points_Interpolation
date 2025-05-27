@@ -48,12 +48,6 @@ igl_include(restricted triangle)
 
 add_subdirectory(${SPARSE_EXTERNAL}/openmesh/OpenMesh-11.0.0)
 
-# Rename glad and glfw, for readability and standard
-#add_library(igl::glad       ALIAS glad)#libigl_glad)
-#add_library(igl::glfw       ALIAS glfw)#libigl_glfw)
-#add_library(polyscope::glad ALIAS polyscope_glad)
-#add_library(polyscope::glfw ALIAS polyscope_glfw)
-
 ############################
 # B spline library.
 # igl -> splines
@@ -75,7 +69,7 @@ target_link_libraries(splines PUBLIC
     OpenMeshTools
 )
 target_compile_definitions(splines PUBLIC
-    SI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/app/meshes/")
+    SI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/app/meshes_new/")
 target_compile_options(splines PRIVATE -g)
 ###############################
 
@@ -133,5 +127,6 @@ target_link_libraries(surfGui_bin
         igl::glfw
         polyscope::polyscope
         compare
+        TinyAD
 )
 target_compile_options(surfGui_bin PRIVATE -g)
