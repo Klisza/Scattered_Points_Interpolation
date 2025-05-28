@@ -10,20 +10,16 @@
 #include <igl/readOBJ.h>
 
 #include <Eigen/Core>
-#include <sparse_interp/basis.h>
-#include <sparse_interp/curve.h>
-#include <sparse_interp/mesh_processing.h>
-#include <sparse_interp/energy.h>
-#include <test.h>
+// #include <sparse_interp/basis.h>
+// #include <sparse_interp/curve.h>
+// #include <sparse_interp/mesh_processing.h>
+// #include <sparse_interp/energy.h>
+// #include <test.h>
 #include <sparse_interp/Types.hpp>
-
-#include <igl/opengl/glfw/Viewer.h>
-#include <igl/boundary_loop.h>
-#include <igl/harmonic.h>
-#include <igl/write_triangle_mesh.h>
 
 #include <Eigen/Core>
 
+#include <TinyAD/Scalar.hh>
 
 using namespace SIBSplines;
 std::string root_path(SI_MESH_DIR);
@@ -149,21 +145,21 @@ void interpCallback() {
       if (ImGui::TreeNode("Predefined Functions")) {
         ImGui::SliderInt("Function Model", &modelType, 0, 5);
         ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
-        if (ImGui::Button("Compute Function Interpolation")) {
-          run_ours(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
-          Eigen::MatrixXd verticies;
-          Eigen::MatrixXi faces;
-          std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
-          std::string model_filename = SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
-          igl::readOBJ(model_filename, verticies, faces);
-          polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface" + std::to_string(modelType), verticies, faces);
-          std::string prefix_pts = "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
-          std::string model_points = SI_MESH_DIR + prefix_pts;
-          Eigen::MatrixXd verticies_pts;
-          Eigen::MatrixXi faces_pts;
-          igl::readOBJ(model_points, verticies_pts, faces_pts);
-          polyscope::PointCloud* psPointCloud = polyscope::registerPointCloud("Model" + std::to_string(modelType), verticies_pts);
-        }
+        // if (ImGui::Button("Compute Function Interpolation")) {
+        //   run_ours(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
+        //   Eigen::MatrixXd verticies;
+        //   Eigen::MatrixXi faces;
+        //   std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
+        //   std::string model_filename = SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
+        //   igl::readOBJ(model_filename, verticies, faces);
+        //   polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface" + std::to_string(modelType), verticies, faces);
+        //   std::string prefix_pts = "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
+        //   std::string model_points = SI_MESH_DIR + prefix_pts;
+        //   Eigen::MatrixXd verticies_pts;
+        //   Eigen::MatrixXi faces_pts;
+        //   igl::readOBJ(model_points, verticies_pts, faces_pts);
+        //   polyscope::PointCloud* psPointCloud = polyscope::registerPointCloud("Model" + std::to_string(modelType), verticies_pts);
+        // }
       }
     }
 

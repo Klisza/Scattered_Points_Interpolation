@@ -9,7 +9,7 @@
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR})
 list(REMOVE_DUPLICATES CMAKE_MODULE_PATH)
 include(${PROJECT_NAME}DownloadExternal)
-include(polyscope_patcher)
+#include(polyscope_patcher)
 include(FetchContent)
 
 ################################################################################
@@ -57,14 +57,15 @@ if(NOT TARGET polyscope::polyscope)
         GIT_TAG v2.4.0
     )
 endif()
+FetchContent_MakeAvailable(polyscope)
 # Patch target clash with libigl
-FetchContent_GetProperties(polyscope)
-if (NOT polyscope_POPULATED)
-  FetchContent_Populate(polyscope)
-  patch_poly(glad polyscope_glad "${polyscope_SOURCE_DIR}/deps/glad/src")
-  patch_poly(glfw polyscope_glfw "${polyscope_SOURCE_DIR}/deps/glfw/src")
-endif()
-add_subdirectory(${polyscope_SOURCE_DIR} ${polyscope_BINARY_DIR})
+#FetchContent_GetProperties(polyscope)
+#if (NOT polyscope_POPULATED)
+  #FetchContent_Populate(polyscope)
+  #patch_poly(glad polyscope_glad "${polyscope_SOURCE_DIR}/deps/glad/src")
+  #patch_poly(glfw polyscope_glfw "${polyscope_SOURCE_DIR}/deps/glfw/src")
+#endif()
+#add_subdirectory(${polyscope_SOURCE_DIR} ${polyscope_BINARY_DIR})
 
 
 # install openmesh
