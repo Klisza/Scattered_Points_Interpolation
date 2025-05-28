@@ -9,16 +9,9 @@
 #include <igl/file_dialog_open.h>
 #include <igl/readOBJ.h>
 
-#include <Eigen/Core>
-// #include <sparse_interp/basis.h>
-// #include <sparse_interp/curve.h>
-// #include <sparse_interp/mesh_processing.h>
-// #include <sparse_interp/energy.h>
-// #include <test.h>
+#include "methods.hpp"
 #include <sparse_interp/Types.hpp>
-
 #include <Eigen/Core>
-
 #include <TinyAD/Scalar.hh>
 
 using namespace SIBSplines;
@@ -27,7 +20,7 @@ std::string filename;
 double sphereSize = 0.002;
 bool enablePolyGUI = true;
 double user_per = 0.5; 
-double user_delta = 0.9; // ours
+double user_delta = 0.4; // ours
 int itSteps = 10; // default
 int modelType = 0;
 int nbr_of_pts = 100;
@@ -35,60 +28,7 @@ std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
 
 using namespace SIBSplines;
 std::string example_root_path(SI_MESH_DIR);
-void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
-{
-	double precision = 0;
-	Eigen::MatrixXd ver;
-	Eigen::MatrixXi F;
-	Eigen::MatrixXd param, paramout;
-	// std::string modelname = "tiger.obj";
-	// std::string meshfile = example_root_path + modelname;
-	std::cout << "reading mesh model: " << meshfile << std::endl;
-	// mesh parametrization, and print out the parametrization result as a obj mesh.
-  
-	mesh_parameterization(meshfile, ver, param, F);
-	paramout.resize(param.rows(), 3);
-	Eigen::VectorXd param_zero = Eigen::VectorXd::Zero(param.rows());
-	paramout << param, param_zero;
-  write_triangle_mesh(meshfile + "_param", paramout, F);
-	// write_triangle_mesh(example_root_path + "param_" + modelname, paramout, F);
 
-	// construct the surface object
-	Bsurface surface;
-	// set up the initial parameters.
-	int nbr = param.rows();					// the number of data points
-	surface.degree1 = 3;					// degree of u direction
-	surface.degree2 = 3;					// degree of v direction
-	surface.U = { {0, 0, 0, 0, 1, 1, 1, 1} }; // the initial U knot vector
-	surface.V = surface.U;					// the initial V knot vector
-	bool enable_max_fix_nbr = true;			// progressively update the knot vectors to make the two knot vectors balanced in length.
-	// generate knot vectors to make sure the data points can be interpolated
-	surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U, surface.V, param, delta, per, target_steps, enable_max_fix_nbr);
-	std::cout << "knot vectors generated" << std::endl;
-
-	Eigen::MatrixXd SPs;
-	Eigen::MatrixXi SFs;
-	int visual_nbr = 200; // the discretization scale for the output surface. The mesh will be 200x200
-
-	// basis contains all the basis functions and their 1 and 2 order diffenrential form.
-	PartialBasis basis(surface);
-
-	// 	solve the control points to obtain the surface.
-	surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
-	std::cout << "surface solved" << std::endl;
-
-	// convert B-spline surface into a triangle mesh
-	surface.surface_visulization(surface, visual_nbr, SPs, SFs);
-
-	precision = surface.max_interpolation_err(ver, param, surface);
-	std::cout << "maximal interpolation error " << surface.max_interpolation_err(ver, param, surface) << std::endl;
-  write_points(meshfile + "pts" + std::to_string(nbr) + ".obj", ver);
-  write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", SPs, SFs);
-  Eigen::MatrixXd verticies;
-  Eigen::MatrixXi faces;
-  igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", verticies, faces);
-  polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
-}
 
 void interpCallback() {
     if (enablePolyGUI){
@@ -145,21 +85,21 @@ void interpCallback() {
       if (ImGui::TreeNode("Predefined Functions")) {
         ImGui::SliderInt("Function Model", &modelType, 0, 5);
         ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
-        // if (ImGui::Button("Compute Function Interpolation")) {
-        //   run_ours(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
-        //   Eigen::MatrixXd verticies;
-        //   Eigen::MatrixXi faces;
-        //   std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
-        //   std::string model_filename = SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
-        //   igl::readOBJ(model_filename, verticies, faces);
-        //   polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface" + std::to_string(modelType), verticies, faces);
-        //   std::string prefix_pts = "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
-        //   std::string model_points = SI_MESH_DIR + prefix_pts;
-        //   Eigen::MatrixXd verticies_pts;
-        //   Eigen::MatrixXi faces_pts;
-        //   igl::readOBJ(model_points, verticies_pts, faces_pts);
-        //   polyscope::PointCloud* psPointCloud = polyscope::registerPointCloud("Model" + std::to_string(modelType), verticies_pts);
-        // }
+        if (ImGui::Button("Compute Function Interpolation")) {
+          run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
+          Eigen::MatrixXd verticies;
+          Eigen::MatrixXi faces;
+          std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
+          std::string model_filename = SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
+          igl::readOBJ(model_filename, verticies, faces);
+          polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface" + std::to_string(modelType), verticies, faces);
+          std::string prefix_pts = "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
+          std::string model_points = SI_MESH_DIR + prefix_pts;
+          Eigen::MatrixXd verticies_pts;
+          Eigen::MatrixXi faces_pts;
+          igl::readOBJ(model_points, verticies_pts, faces_pts);
+          polyscope::PointCloud* psPointCloud = polyscope::registerPointCloud("Model" + std::to_string(modelType), verticies_pts);
+        }
       }
     }
 

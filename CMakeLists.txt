@@ -106,12 +106,12 @@ target_link_libraries(compare PUBLIC splines)
 
 add_executable(surfGui_bin
     src/main.cpp
-    # app/test.cpp
+    src/methods.cpp
 )
 
 target_include_directories(surfGui_bin PUBLIC 
     ${PROJECT_BINARY_DIR}/include
-    # ${PROJECT_SOURCE_DIR}/app
+    ${PROJECT_SOURCE_DIR}/app
     ${SPARSE_EXTERNAL}/TinyAD/include
     )
 target_include_directories(splines PRIVATE
@@ -127,7 +127,6 @@ target_link_libraries(surfGui_bin
         compare
         igl::core
         igl::predicates
-        #igl::opengl
         polyscope::polyscope
         TinyAD::TinyAD
 )
