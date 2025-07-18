@@ -86,7 +86,7 @@ void interpCallback() {
         ImGui::SliderInt("Function Model", &modelType, 0, 5);
         ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
         if (ImGui::Button("Compute Function Interpolation")) {
-          run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
+          run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, true);
           Eigen::MatrixXd verticies;
           Eigen::MatrixXi faces;
           std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
@@ -100,7 +100,9 @@ void interpCallback() {
           igl::readOBJ(model_points, verticies_pts, faces_pts);
           polyscope::PointCloud* psPointCloud = polyscope::registerPointCloud("Model" + std::to_string(modelType), verticies_pts);
         }
+        ImGui::TreePop();
       }
+      ImGui::TreePop();
     }
 
     ImGui::End();

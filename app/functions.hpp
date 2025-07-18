@@ -412,7 +412,21 @@ namespace SIBSplines
 				std::cout << "write original model" << std::endl;
 			}
 		}
-
+		/**
+		 * @brief Generates sampled points on a chosen model surface, optionally includes its boundary corners,
+		 *        computes a triangulation, and writes out a high-resolution mesh.
+		 *
+		 * @param nbr      Total number of sample points to generate.
+		 * @param[out] V   An (nbr × 3) matrix of 3D vertex positions on the model surface.
+		 * @param[out] F   An index matrix of triangle faces (connectivity) over the sample points.
+		 * @param[out] param
+		 *                 An (nbr × 2) matrix of (u,v) parameters for each sample (if used by method).
+		 * @param method   Integer in [0..5] selecting the surface function:
+		 *                 0: peak, 1: contour (with optional noise), 2: hyperbolic (with optional noise),
+		 *                 3: sinusoidal, 4: bilinear patch, 5: snail.
+		 * @param corners  If true, include the four domain corners as extra sample points.
+		 * @param path     Path prefix where the high-resolution OBJ file will be saved.
+		*/
 		void get_model_sample_points(const int nbr, Eigen::MatrixXd &V, Eigen::MatrixXi &F,
 									 Eigen::MatrixXd &param, const int method, bool corners, std::string path)
 		{

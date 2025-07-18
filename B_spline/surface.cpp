@@ -4,102 +4,124 @@
 #include<sparse_interp/mesh_processing.h>
 
 namespace SIBSplines{
-int Bsurface::nu() {
-	return U.size() - 2 - degree1;
-}
-int Bsurface::nv() {
-	return V.size() - 2 - degree2;
-}
-// TODO make this function more efficient by removing 0 valued elements
-Vector3d BSplineSurfacePoint_(const int degree1, const int degree2,
+	// Numeber of u/v knots to change
+	int Bsurface::nu() {
+		return U.size() - 2 - degree1;
+	}
+	int Bsurface::nv() {
+		return V.size() - 2 - degree2;
+	}
+	
+	// TODO make this function more efficient by removing 0 valued elements
+	/**
+	 * @brief Evaluate a point on a bicubic (or bi-degree) B-spline surface.
+	 *
+	 * Computes:
+	 *   S(upara, vpara) = ∑_{i=0..nu} ∑_{j=0..nv}
+	 *                       N_{i,degree1}(upara) * N_{j,degree2}(vpara) * P_{i,j}
+	 *
+	 * where N_{i,p}(·) are the univariate B-spline basis functions of degree p
+	 * defined on knot vectors U (in u) and V (in v), and P_{i,j} are the control points.
+	 *
+	 * @param degree1   Degree p of the B-spline in the u-direction.
+	 * @param degree2   Degree q of the B-spline in the v-direction.
+	 * @param U         Knot vector in the u-direction (size = nu + p + 2).
+	 * @param V         Knot vector in the v-direction (size = nv + q + 2).
+	 * @param upara     Parameter value u at which to evaluate the surface.
+	 * @param vpara     Parameter value v at which to evaluate the surface.
+	 * @param control   2D array of control points P_{i,j}, size (nu+1)×(nv+1).
+	 * @return          The point S(upara, vpara) on the surface as Eigen::Vector3d.
+	 */
+	Vector3d BSplineSurfacePoint_(const int degree1, const int degree2,
 	const std::vector<double>& U, const std::vector<double>& V, const double upara,
 	const double vpara, const std::vector<std::vector<Vector3d>>& control) {
-	Eigen::Vector3d result = Eigen::Vector3d(0, 0, 0);
-	int nu = U.size() - 2 - degree1;// n + 1 = number of control points
-	assert(nu + 1 == control.size());
-	int nv = V.size() - 2 - degree2;// n + 1 = number of control points
-	assert(nv + 1 == control[0].size());
+		Eigen::Vector3d result = Eigen::Vector3d(0, 0, 0);
+		int nu = U.size() - 2 - degree1;// n + 1 = number of control points
+		assert(nu + 1 == control.size());
+		int nv = V.size() - 2 - degree2;// n + 1 = number of control points
+		assert(nv + 1 == control[0].size());
 
-	for (int i = 0; i < nu + 1; i++) {
-		double base1 = Nip(i, degree1, upara, U);
-		for (int j = 0; j < nv + 1; j++) {
-			double base2 = Nip(j, degree2, vpara, V);
-			result += base1 * base2 * control[i][j];
+		for (int i = 0; i < nu + 1; i++) {
+			double base1 = Nip(i, degree1, upara, U);
+			for (int j = 0; j < nv + 1; j++) {
+				double base2 = Nip(j, degree2, vpara, V);
+				result += base1 * base2 * control[i][j];
+			}
+			//std::cout << "base " << base << std::endl;
+
 		}
-		//std::cout << "base " << base << std::endl;
-
+		return result;
 	}
-	return result;
-}
-Vector3d Bsurface::BSplineSurfacePoint(const Bsurface& surface, const double upara, const double vpara) {
-	return BSplineSurfacePoint_(surface.degree1, surface.degree2, surface.U, surface.V, upara, vpara, surface.control_points);
-}
-Vector3d Bsurface::BSplineSurfacePoint(const std::vector<std::vector<std::vector<double>>> &upolys, const std::vector<std::vector<std::vector<double>>> &vpolys,
+	// 
+	Vector3d Bsurface::BSplineSurfacePoint(const Bsurface& surface, const double upara, const double vpara) {
+		return BSplineSurfacePoint_(surface.degree1, surface.degree2, surface.U, surface.V, upara, vpara, surface.control_points);
+	}
+	Vector3d Bsurface::BSplineSurfacePoint(const std::vector<std::vector<std::vector<double>>> &upolys, const std::vector<std::vector<std::vector<double>>> &vpolys,
 									   const std::vector<std::vector<std::vector<double>>> &tpolys, double u, double v, double t, const std::vector<double> &UKV, const std::vector<double> &VKV,
 									   const std::vector<double> &TKV, const std::vector<std::vector<std::vector<Vector3d>>> &CPs, const int udegree, 
 									   const int vdegree, const int tdegree)
-{
-	int uitv = -1, vitv = -1, titv = -1;
-	for (int i = udegree; i < UKV.size() - 1; i++)
 	{
-		if (u >= UKV[i] && u <= UKV[i + 1])
+		int uitv = -1, vitv = -1, titv = -1;
+		for (int i = udegree; i < UKV.size() - 1; i++)
 		{
-			uitv = i;
-			break;
-		}
-	}
-	for (int i = vdegree; i < VKV.size() - 1; i++)
-	{
-		if (v >= VKV[i] && v <= VKV[i + 1])
-		{
-			vitv = i;
-			break;
-		}
-	}
-	for (int i = tdegree; i < TKV.size() - 1; i++)
-	{
-		if (t >= TKV[i] && t <= TKV[i + 1])
-		{
-			titv = i;
-			break;
-		}
-	}
-
-	if (uitv < 0 || vitv < 0 || titv < 0)
-	{
-		std::cout << "Out of Range in BSplineSurfacePoint!\n";
-	}
-	std::vector<double> uvalues = basisValues(uitv, udegree, upolys, u);
-	std::vector<double> vvalues = basisValues(vitv, vdegree, vpolys, v);
-	std::vector<double> tvalues = basisValues(titv, tdegree, tpolys, t);
-	Vector3d result(0,0,0);
-	for (int i = uitv - udegree; i < uitv + 1; i++)
-	{
-		double Nu = uvalues[i - uitv + udegree];
-		for (int j = vitv - vdegree; j < vitv + 1; j++)
-		{
-			double Nv = vvalues[j - vitv + vdegree];
-			for (int k = titv - tdegree; k < titv + 1; k++)
+			if (u >= UKV[i] && u <= UKV[i + 1])
 			{
-				double Nt = tvalues[k - titv + tdegree];
-				result += CPs[i][j][k] * Nu * Nv * Nt;
+				uitv = i;
+				break;
 			}
 		}
-	}
-	return result;
-}
-// id_list may contain id, if contains, return the one right after id; if the one is the id is the last of id_list,
-	// still return id. this happens when:
-/*
-t0: oxoo
-t1: ooxx
-t2:     xooo
-t3:     oxoo
-*/
-// where the xs are the choosen ones. x in the first row is the choosen control point of t0, and then t1 can choose two 
-// control points
+		for (int i = vdegree; i < VKV.size() - 1; i++)
+		{
+			if (v >= VKV[i] && v <= VKV[i + 1])
+			{
+				vitv = i;
+				break;
+			}
+		}
+		for (int i = tdegree; i < TKV.size() - 1; i++)
+		{
+			if (t >= TKV[i] && t <= TKV[i + 1])
+			{
+				titv = i;
+				break;
+			}
+		}
 
-// if not contain id, return the first element of id_list(t2 row);
+		if (uitv < 0 || vitv < 0 || titv < 0)
+		{
+			std::cout << "Out of Range in BSplineSurfacePoint!\n";
+		}
+		std::vector<double> uvalues = basisValues(uitv, udegree, upolys, u);
+		std::vector<double> vvalues = basisValues(vitv, vdegree, vpolys, v);
+		std::vector<double> tvalues = basisValues(titv, tdegree, tpolys, t);
+		Vector3d result(0,0,0);
+		for (int i = uitv - udegree; i < uitv + 1; i++)
+		{
+			double Nu = uvalues[i - uitv + udegree];
+			for (int j = vitv - vdegree; j < vitv + 1; j++)
+			{
+				double Nv = vvalues[j - vitv + vdegree];
+				for (int k = titv - tdegree; k < titv + 1; k++)
+				{
+					double Nt = tvalues[k - titv + tdegree];
+					result += CPs[i][j][k] * Nu * Nv * Nt;
+				}
+			}
+		}
+		return result;
+	}	
+	// id_list may contain id, if contains, return the one right after id; if the one is the id is the last of id_list,
+		// still return id. this happens when:
+	/*
+	t0: oxoo
+	t1: ooxx
+	t2:     xooo
+	t3:     oxoo
+	*/
+	// where the xs are the choosen ones. x in the first row is the choosen control point of t0, and then t1 can choose two 
+	// control points
+
+	// if not contain id, return the first element of id_list(t2 row);
 
 int find_the_id_after_this_one(const int id, const std::vector<int>& id_list) {
 	int which = -1;
@@ -859,6 +881,7 @@ std::vector<double> update_knot_vector_based_on_grid(const int degree1, const in
 	}
 	return Utemp;
 }
+
 void Bsurface::generate_interpolation_knot_vectors( int degree1, int degree2,
 	std::vector<double>& Uknot, std::vector<double>& Vknot,
 	const Eigen::MatrixXd& param_original, 

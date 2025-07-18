@@ -1,17 +1,20 @@
 #include <Eigen/Core>
 #include <sparse_interp/Types.hpp>
 #include <sparse_interp/energy.h>
+#include <sparse_interp/functions.hpp>
 #include <polyscope/point_cloud.h>
 #include <polyscope/surface_mesh.h>
 #include <igl/file_dialog_open.h>
 #include <igl/readOBJ.h>
 
-#include <functions.hpp>
 #include "methods.hpp"
 #include <cmath>
 #include <igl/harmonic.h>
 #include <igl/write_triangle_mesh.h>
 #include <igl/Timer.h>
+
+#include <TinyAD/Scalar.hh>
+#include <TinyAD/ScalarFunction.hh>
 
 //using namespace SIBSplines;
 
@@ -177,50 +180,49 @@ namespace SIBSplines {
 
         precision = surface.max_interpolation_err(ver, param, surface);
         std::cout << "maximal interpolation error " << surface.max_interpolation_err(ver, param, surface) << std::endl;
-    write_points(meshfile + "pts" + std::to_string(nbr) + ".obj", ver);
-    write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", SPs, SFs);
-    Eigen::MatrixXd verticies;
-    Eigen::MatrixXi faces;
-    igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", verticies, faces);
-    polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
+		write_points(meshfile + "pts" + std::to_string(nbr) + ".obj", ver);
+		write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", SPs, SFs);
+		Eigen::MatrixXd verticies;
+		Eigen::MatrixXi faces;
+		igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", verticies, faces);
+		polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
     }
 
+	// Optimized for all the variables using TinyAD as a autodifferenciation.
     void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, const std::string path, const std::string tail,
 	const double per, const bool enable_local_energy) {
-        Eigen::MatrixXd fcolor(1, 3), ecolor(1, 3), pcolor(1, 3), red(1, 3), green(1, 3), blue(1, 3);
-		fcolor << 1, 0, 0;
-		ecolor << 0.9, 0.9, 0.9;
-		;
-		pcolor << 0, 0.9, 0.5;
-		red << 1, 0, 0;
-		green << 0, 1, 0;
-		blue << 0, 0, 1;
+		// Timer variables
 		igl::Timer timer;
 		double time_knot = 0;
 		double time_solve = 0;
 		double precision = 0;
-
+		
+		
+		// Mesh variables / initialization
 		Eigen::MatrixXd ver;
 		int nbr = nbr_pts; // nbr of points
 		Eigen::MatrixXi F;
 		Eigen::MatrixXd param;
 		int method = model;
 		bool corners = true;
-		SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path);
-		// std::cout << "ver\n" << ver << std::endl;
+		SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path); // Inits the mesh vars
+		// Need to add a global variable count.
+		auto func = TinyAD::scalar_function<2>(TinyAD::range(nbr));
+
+		// Splines vars init
 		int degree1 = 3;
 		int degree2 = 3;
 		std::vector<double> Uknot = {{0, 0, 0, 0, 1, 1, 1, 1}};
 		std::vector<double> Vknot = Uknot;
 		int perturb_itr = 0;
-		// double per_ours = 0.9;
-		// double per = 0.2;
 		int target_steps = 10;
 		bool enable_max_fix_nbr = true;
 
 		timer.start();
 		std::cout << "before generating knot vectors" << std::endl;
 		std::cout << "data size " << ver.rows() << std::endl;
+
+		// 
 		Bsurface surface;
 		surface.generate_interpolation_knot_vectors(degree1, degree2, Uknot, Vknot, param, per_ours, per, target_steps, enable_max_fix_nbr);
 
@@ -244,6 +246,7 @@ namespace SIBSplines {
 			timer.stop();
 			time_solve = timer.getElapsedTimeInSec();
 			surface.surface_visulization(surface, 100, SPs, SFs);
+			// Energy solving part
 			if (enable_local_energy)
 			{
 				double timeitr = 0;

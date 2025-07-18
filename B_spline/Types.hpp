@@ -6,10 +6,6 @@
 #include <Eigen/Sparse>
 #include <Eigen/SparseLU>
 
-//#define NO_SELECTING_ACP
-//#define NAIVE_SELECTING_ACP
-//#define WEIGHT_NAIVE
-
 namespace SIBSplines
 {
 	typedef Eigen::SparseMatrix<double> SparseMatrixXd;
@@ -25,23 +21,33 @@ namespace SIBSplines
 	{
 		bool flag;
 	};
-
-	namespace ply_operations
+	
+	template <typename Tp, typename knotT, typename valueT>
+	class ply_operations
 	{
-		std::vector<double> polynomial_simplify(const std::vector<double> &poly);
-		std::vector<double> polynomial_add(const std::vector<double> &poly1, const std::vector<double> &poly2);
-		std::vector<double> polynomial_times(const std::vector<double> &poly1, const std::vector<double> &poly2);
-		std::vector<double> polynomial_times(const std::vector<double> &poly1, const double &nbr);
-		double polynomial_value(const std::vector<double> &poly, const double para);
-		std::vector<double> polynomial_integration(const std::vector<double> &poly);
-		double polynomial_integration(const std::vector<double> &poly, const double lower, const double upper);
-	}
+	public:
+		ply_operations() {};
+    	~ply_operations() {};
+		// Doesn't work I guess with TinyAD since its ad types and not double.
+		//template <typename Tp, typename knotT, typename valueT>
+		//std::vector<knotT> polynomial_simplify(const std::vector<Tp> &poly);
+		
+		std::vector<knotT> polynomial_add(const std::vector<knotT> &poly1, const std::vector<knotT> &poly2);
+		std::vector<knotT> polynomial_times(const std::vector<knotT> &poly1, const std::vector<knotT> &poly2);
+		std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const Tp &nbr);
+		Tp power(const valueT &value, const int order);
+		Tp polynomial_value(const std::vector<knotT> &poly, const valueT para);
+		std::vector<Tp> polynomial_integration(const std::vector<Tp> &poly);
+		Tp polynomial_integration(const std::vector<Tp> &poly, const Tp lower, const Tp upper);
+	};
+	
 	
 	class PartialBasis;
 	class Bsurface
 	{
 	public:
-	Bsurface(){};
+		Bsurface(){};
+		~Bsurface() {};
 		int degree1;
 		int degree2;
 		std::vector<double> U;
@@ -62,13 +68,16 @@ namespace SIBSplines
 		void solve_control_points_for_fairing_surface(Bsurface &surface, const Eigen::MatrixXd &paras,
 													  const Eigen::MatrixXd &points, PartialBasis &basis);
 		// calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
+		// Could be important for AD
 		Eigen::MatrixXd surface_energy_calculation(Bsurface &surface, PartialBasis &basis,
 												   const int discrete, Eigen::MatrixXd &energy_uu, Eigen::MatrixXd &energy_vv, Eigen::MatrixXd &energy_uv);
 
 		// [U[which],U[which+1]) is the problematic one
+		// Same case here
 		void detect_max_energy_interval(Bsurface &surface, const Eigen::MatrixXd &energy, const Eigen::MatrixXd &energy_uu,
 										const Eigen::MatrixXd &energy_vv, bool &uorv, int &which, double &em);
-
+		
+		// ..
 		Eigen::MatrixXd interpolation_err_for_apprximation(const Eigen::MatrixXd &ver,
 														   const Eigen::MatrixXd &param, Bsurface &surface, double &max_err);
 		double max_interpolation_err(const Eigen::MatrixXd &ver, const Eigen::MatrixXd &param, Bsurface &surface);
@@ -80,6 +89,7 @@ namespace SIBSplines
 									 const int vdegree, const int tdegree);
 		// insert in total n knots into U and V. 
 		void RefineKnots(int nbr);
+		
 
 		void constructRegularF(const int vnbr, const int rnbr, Eigen::MatrixXi &F)
 		{
@@ -102,16 +112,16 @@ namespace SIBSplines
 					fnbr++;
 				}
 			}
-			// std::cout<<"check F, \n"<<F<<"\n";
 		}
 	};
+	
+	
 	class Bcurve
 	{
 	public:
-	Bcurve(){};
+		Bcurve(){};
 		int degree;
 		std::vector<double> U;
-		// double upara;
 		std::vector<Vector3d> control_points;
 		int nu(); // nu + 1 is the number of control points in u direction
 		bool curve_can_be_interpolated(const std::vector<double> &U, const int degree, const std::vector<double> &paras,
@@ -202,11 +212,12 @@ namespace SIBSplines
 	void print_vector(const std::vector<double> &input);
 	void print_vector(const std::vector<int> &input);
 
-	std::vector<double> Nip_func(const int i, const int p, const double u, const std::vector<double> &U);
+	template <typename Tp, typename knotT, typename valueT>
+	std::vector<Tp> Nip_func(const int i, const int p, const double u, const std::vector<double> &U);
 
 	std::vector<double> knot_vector_insert_one_value(const std::vector<double> &U, const double value);
-
+	
 	std::vector<double> fix_knot_vector_to_interpolate_curve_WKW(const int degree, const std::vector<double> &init_vec,
-																 const std::vector<double> &paras, const double per, bool &fully_fixed, const int fix_nbr = -1);
+															 const std::vector<double> &paras, const double per, bool &fully_fixed, const int fix_nbr = -1);
 	std::vector<double> basisValues(const int whichItv, const int degree, const std::vector<std::vector<std::vector<double>>> &basis, const double param);
 }	
