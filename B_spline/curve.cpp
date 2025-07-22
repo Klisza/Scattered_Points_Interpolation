@@ -41,7 +41,7 @@ Eigen::MatrixXd slove_linear_system(const Eigen::MatrixXd& A, const Eigen::Matri
 	}
 	return x;
 }
-Eigen::VectorXd slove_linear_system(const Eigen::MatrixXd& A, const Eigen::VectorXd &b,
+Eigen::VectorXd solve_linear_system(const Eigen::MatrixXd& A, const Eigen::VectorXd &b,
 	const bool check_error, double &relative_error) {
 	Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
 	//Eigen::VectorXd x = A.fullPivLu().solve(b);

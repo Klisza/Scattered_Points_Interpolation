@@ -5,10 +5,12 @@
 
 namespace SIBSplines{
 	// Numeber of u/v knots to change
-	int Bsurface::nu() {
+	template <typename Tp, typename knotT, typename valueT>
+	int Bsurface<Tp, knotT, valueT>::nu() {
 		return U.size() - 2 - degree1;
 	}
-	int Bsurface::nv() {
+	template <typename Tp, typename knotT, typename valueT>
+	int Bsurface<Tp, knotT, valueT>::nv() {
 		return V.size() - 2 - degree2;
 	}
 	

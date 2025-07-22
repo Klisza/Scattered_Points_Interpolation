@@ -22,6 +22,7 @@ namespace SIBSplines
 		bool flag;
 	};
 	
+	// Ply done templating for AD but I could maybe need functions to hande different cases for AD types -> new functions
 	template <typename Tp, typename knotT, typename valueT>
 	class ply_operations
 	{
@@ -41,8 +42,9 @@ namespace SIBSplines
 		Tp polynomial_integration(const std::vector<Tp> &poly, const Tp lower, const Tp upper);
 	};
 	
-	
+	template<typename Tp, typename knotT, typename valueT>
 	class PartialBasis;
+	template<typename Tp, typename knotT, typename valueT>
 	class Bsurface
 	{
 	public:
@@ -145,12 +147,13 @@ namespace SIBSplines
 		Vector3d BsplinePoint(const int degree, const std::vector<double> &U, const double para,
 							  const Eigen::MatrixXd &pts);
 	};
+	template<typename Tp, typename knotT, typename valueT>
 	class PolynomialBasis
 	{
 	public:
-		PolynomialBasis(Bsurface &surface);// get all the bases of the B-spline surface into polynomial format
+		PolynomialBasis(Bsurface<Tp, knotT, valueT> &surface);// get all the bases of the B-spline surface into polynomial format
 		PolynomialBasis();
-		void init(Bsurface &surface);
+		void init(Bsurface<Tp, knotT, valueT> &surface);
 		std::vector<double> poly(const int id, const double value, const bool UVknot);
 		void clear();
 		// the (i,j) th element of the basis is the basis function defined on {U_i,U_{i+1}}, the j ranges from 0 to degree.
@@ -160,7 +163,7 @@ namespace SIBSplines
 		std::vector<double> Vknot;
 		int degree1;
 		int degree2;
-		std::vector<std::vector<std::vector<double>>> calculate_single(const int degree, const std::vector<double> &knotVector);
+		std::vector<std::vector<std::vector<Tp>>> calculate_single(const int degree, const std::vector<knotT> &knotVector);
 		
 	private:
 		int nu;
@@ -169,15 +172,16 @@ namespace SIBSplines
 		std::vector<std::vector<std::vector<double>>> calculate(const bool uorv); // 0 checking u; 1 checking v
 	};
 
+	template<typename Tp, typename knotT, typename valueT>
 	// get the first or second partial differential polynomial of U or V knot vectors
 	class PartialBasis
 	{
 	public:
 		// PartialBasis(PolynomialBasis& basis, Bsurface& surface);
-		PartialBasis(Bsurface &surface);
+		PartialBasis(Bsurface<Tp, knotT, valueT>& &surface);
 		PartialBasis();
-		void init(Bsurface &surface);
-		void init(PolynomialBasis &pb);
+		void init(Bsurface<Tp, knotT, valueT> &surface);
+		void init(PolynomialBasis<Tp, knotT, valueT> &pb);
 		// return a certain basis (in 0, 1 or 2 order partial differential) of N_{id}(value)
 		// UVknot==1 -> check v
 		std::vector<double> poly(const int id, const double value, const bool UVknot, int partial);
@@ -201,7 +205,7 @@ namespace SIBSplines
 	void vertices_to_edges(const Eigen::MatrixXd &pts, Eigen::MatrixXi &edges);
 	Eigen::MatrixXd vector_to_matrix_3d(const std::vector<Vector3d> &v);
 
-	Eigen::MatrixXd slove_linear_system(const Eigen::MatrixXd &A, const Eigen::MatrixXd &b,
+	Eigen::MatrixXd solve_linear_system(const Eigen::MatrixXd &A, const Eigen::MatrixXd &b,
 										const bool check_error, double &relative_error);
 	void write_points(const std::string& file, const Eigen::MatrixXd& ver);
 	void write_csv(const std::string &file, const std::vector<std::string> titles, const std::vector<double> data);

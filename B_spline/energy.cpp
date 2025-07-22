@@ -46,6 +46,7 @@ namespace SIBSplines{
 		}
 		return result;//ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
 	}
+	// Cauchy product/Polynomial product
 	template <typename Tp, typename knotT, typename valueT>
 	std::vector<knotT> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<knotT>& poly1, const std::vector<knotT>& poly2) {
 		int size = poly1.size() + poly2.size() - 1;
@@ -61,6 +62,7 @@ namespace SIBSplines{
 		}
 		return result; //ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
 	}
+	// Scalar multiplication
 	template <typename Tp, typename knotT, typename valueT>
 	std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<Tp>& poly1, const Tp& nbr) {
 		std::vector<Tp> result;
@@ -95,6 +97,7 @@ namespace SIBSplines{
 		return result;
 	}
 	template <typename Tp, typename knotT, typename valueT>
+	// I dont know if divison works
 	std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp>& poly) {
 		std::vector<Tp> result(poly.size() + 1);
 		result[0] = 0;
@@ -179,8 +182,8 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-
-	void PolynomialBasis::init(Bsurface& surface) {
+	template <typename Tp, typename knotT, typename valueT>
+	void PolynomialBasis<Tp, knotT, valueT>::init(Bsurface<Tp, knotT, valueT>& surface) {
 		Uknot = surface.U;
 		Vknot = surface.V;
 		degree1 = surface.degree1;
@@ -192,19 +195,24 @@ namespace SIBSplines{
 		inited = true;
 		return;
 	}
-	void PolynomialBasis::clear() {
+	template <typename Tp, typename knotT, typename valueT>
+	void PolynomialBasis<Tp, knotT, valueT>::clear() {
 		Uknot.clear();
 		Vknot.clear();
 		Ubasis.clear();
 		Vbasis.clear();
 		inited = false;
 	}
-	PolynomialBasis::PolynomialBasis(Bsurface& surface) {
+	template <typename Tp, typename knotT, typename valueT>
+	PolynomialBasis<Tp, knotT, valueT>::PolynomialBasis(Bsurface<Tp, knotT, valueT>& surface) {
 		init(surface);
 	}
-	PolynomialBasis::PolynomialBasis() {
+	template <typename Tp, typename knotT, typename valueT>
+	PolynomialBasis<Tp, knotT, valueT>::PolynomialBasis() {
 	}
-	std::vector<double> PolynomialBasis::poly(const int id, const double value, const bool UVknot) {
+	// Poly return the coefficents 
+	template <typename Tp, typename knotT, typename valueT>
+	std::vector<double> PolynomialBasis<Tp, knotT, valueT>::poly(const int id, const double value, const bool UVknot) {
 		if (!inited) {
 			std::cout << "WRONG USAGE OF CLASS PolynomialBasis, YOU SHOULD INITIALIZE IT BY CALLING init()" << std::endl;
 		}
@@ -248,9 +256,11 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-	std::vector<std::vector<std::vector<double>>> PolynomialBasis::calculate_single(const int degree, const std::vector<double> &knotVector)
+	// 
+	template<typename Tp, typename knotT, typename valueT>
+	std::vector<std::vector<std::vector<Tp>>> PolynomialBasis<Tp, knotT, valueT>::calculate_single(const int degree, const std::vector<knotT> &knotVector)
 	{
-		std::vector<std::vector<std::vector<double>>> pl;
+		std::vector<std::vector<std::vector<Tp>>> pl;
 		int n = knotVector.size() - 2 - degree;
 		pl.resize(n + 1);
 		for (int i = degree; i < n + 1; i++) {// in interval [U[i], U[i+1])
@@ -261,9 +271,11 @@ namespace SIBSplines{
 		}
 		return pl;
 	}
-	std::vector<double> basisValues(const int whichItv, const int degree, const std::vector<std::vector<std::vector<double>>>&basis, const double param)
+	// Should work
+	template<typename Tp, typename knotT, typename valueT>
+	std::vector<Tp> basisValues(const int whichItv, const int degree, const std::vector<std::vector<std::vector<double>>>&basis, const double param)
 	{
-		std::vector<double> result(degree + 1);
+		std::vector<Tp> result(degree + 1);
 		for(int i=0;i<degree+1;i++)
 		{
 			if(whichItv>=basis.size())
