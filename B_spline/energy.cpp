@@ -95,6 +95,7 @@ namespace SIBSplines{
 		return result;
 	}
 	template <typename Tp, typename knotT, typename valueT>
+	// I dont know if divison works
 	std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp>& poly) {
 		std::vector<Tp> result(poly.size() + 1);
 		result[0] = 0;
@@ -248,9 +249,10 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-	std::vector<std::vector<std::vector<double>>> PolynomialBasis::calculate_single(const int degree, const std::vector<double> &knotVector)
+	template<typename Tp, typename knotT, typename valueT>
+	std::vector<std::vector<std::vector<Tp>>> PolynomialBasis::calculate_single(const int degree, const std::vector<double> &knotVector)
 	{
-		std::vector<std::vector<std::vector<double>>> pl;
+		std::vector<std::vector<std::vector<Tp>>> pl;
 		int n = knotVector.size() - 2 - degree;
 		pl.resize(n + 1);
 		for (int i = degree; i < n + 1; i++) {// in interval [U[i], U[i+1])
@@ -261,9 +263,11 @@ namespace SIBSplines{
 		}
 		return pl;
 	}
-	std::vector<double> basisValues(const int whichItv, const int degree, const std::vector<std::vector<std::vector<double>>>&basis, const double param)
+	// Should work
+	template<typename Tp, typename knotT, typename valueT>
+	std::vector<Tp> basisValues(const int whichItv, const int degree, const std::vector<std::vector<std::vector<double>>>&basis, const double param)
 	{
-		std::vector<double> result(degree + 1);
+		std::vector<Tp> result(degree + 1);
 		for(int i=0;i<degree+1;i++)
 		{
 			if(whichItv>=basis.size())
