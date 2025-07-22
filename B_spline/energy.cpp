@@ -256,9 +256,14 @@ namespace SIBSplines{
 		}
 		return result;
 	}
+<<<<<<< HEAD
 	// 
 	template<typename Tp, typename knotT, typename valueT>
 	std::vector<std::vector<std::vector<Tp>>> PolynomialBasis<Tp, knotT, valueT>::calculate_single(const int degree, const std::vector<knotT> &knotVector)
+=======
+	template<typename Tp, typename knotT, typename valueT>
+	std::vector<std::vector<std::vector<Tp>>> PolynomialBasis::calculate_single(const int degree, const std::vector<double> &knotVector)
+>>>>>>> a9b49aa4b3c59767fb320e06fecfbd069ced1e3a
 	{
 		std::vector<std::vector<std::vector<Tp>>> pl;
 		int n = knotVector.size() - 2 - degree;
