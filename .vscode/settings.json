@@ -107,6 +107,11 @@
         "cinttypes": "cpp",
         "valarray": "cpp",
         "csetjmp": "cpp",
-        "sparse": "cpp"
+        "sparse": "cpp",
+        "orderingmethods": "cpp",
+        "pastixsupport": "cpp",
+        "sparsecholesky": "cpp",
+        "iterativesolvers": "cpp",
+        "polynomials": "cpp"
     }
 }

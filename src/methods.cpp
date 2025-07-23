@@ -142,17 +142,17 @@ namespace SIBSplines {
         // std::string modelname = "tiger.obj";
         // std::string meshfile = example_root_path + modelname;
         std::cout << "reading mesh model: " << meshfile << std::endl;
+		auto func = TinyAD::scalar_function<2>(TinyAD::range(param.size()));
         // mesh parametrization, and print out the parametrization result as a obj mesh.
-    
         mesh_parameterization(meshfile, ver, param, F);
         paramout.resize(param.rows(), 3);
         Eigen::VectorXd param_zero = Eigen::VectorXd::Zero(param.rows());
         paramout << param, param_zero;
         write_triangle_mesh(meshfile + "_param", paramout, F);
-        // write_triangle_mesh(example_root_path + "param_" + modelname, paramout, F);
 
         // construct the surface object
         Bsurface surface;
+
         // set up the initial parameters.
         int nbr = param.rows();					// the number of data points
         surface.degree1 = 3;					// degree of u direction
@@ -161,6 +161,7 @@ namespace SIBSplines {
         surface.V = surface.U;					// the initial V knot vector
         bool enable_max_fix_nbr = true;			// progressively update the knot vectors to make the two knot vectors balanced in length.
         // generate knot vectors to make sure the data points can be interpolated
+		// Alg 1 from the paper 
         surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U, surface.V, param, delta, per, target_steps, enable_max_fix_nbr);
         std::cout << "knot vectors generated" << std::endl;
 
@@ -175,7 +176,10 @@ namespace SIBSplines {
         surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
         std::cout << "surface solved" << std::endl;
 
-        // convert B-spline surface into a triangle mesh
+		/* ///////////////////////
+			Data Visualization 
+		//////////////////////// */
+		if(1) {
         surface.surface_visulization(surface, visual_nbr, SPs, SFs);
 
         precision = surface.max_interpolation_err(ver, param, surface);
@@ -186,6 +190,7 @@ namespace SIBSplines {
 		Eigen::MatrixXi faces;
 		igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", verticies, faces);
 		polyscope::SurfaceMesh* psSurfaceMesh = polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
+		}
     }
 
 	// Optimized for all the variables using TinyAD as a autodifferenciation.
@@ -206,7 +211,8 @@ namespace SIBSplines {
 		int method = model;
 		bool corners = true;
 		SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path); // Inits the mesh vars
-		// Need to add a global variable count.
+		// Vars = all control points * 2 + knots + 
+		std::vector<double> vars;
 		auto func = TinyAD::scalar_function<2>(TinyAD::range(nbr));
 
 		// Splines vars init
@@ -222,8 +228,7 @@ namespace SIBSplines {
 		std::cout << "before generating knot vectors" << std::endl;
 		std::cout << "data size " << ver.rows() << std::endl;
 
-		// 
-		Bsurface surface;
+		Bsurface< surface;
 		surface.generate_interpolation_knot_vectors(degree1, degree2, Uknot, Vknot, param, per_ours, per, target_steps, enable_max_fix_nbr);
 
 		timer.stop();
@@ -319,7 +324,5 @@ namespace SIBSplines {
 			write_svg_knot_vectors(path + "ours_" + "p" + std::to_string(nbr) + "_m_" + std::to_string(method) + tail + "knots.svg", surface.U, surface.V);
 		}
 		std::cout << "total time " << time_knot + time_solve << std::endl;
-
-		Eigen::MatrixXd p0(1, 3), p1(1, 3);
     }
 }

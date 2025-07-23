@@ -196,7 +196,6 @@ namespace SIBSplines
 			surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
 			timer.stop();
 			time_solve = timer.getElapsedTimeInSec();
-			surface.surface_visulization(surface, 100, SPs, SFs);
 			if (enable_local_energy)
 			{
 				double timeitr = 0;

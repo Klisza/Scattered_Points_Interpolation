@@ -55,10 +55,12 @@ namespace SIBSplines{
 		return result;
 	}
 	// 
-	Vector3d Bsurface::BSplineSurfacePoint(const Bsurface& surface, const double upara, const double vpara) {
+	template<typename Tp, typename knotT, typename valueT>
+	Vector3d Bsurface<Tp, knotT, valueT>::BSplineSurfacePoint(const Bsurface<Tp, knotT, valueT>& surface, const double upara, const double vpara) {
 		return BSplineSurfacePoint_(surface.degree1, surface.degree2, surface.U, surface.V, upara, vpara, surface.control_points);
 	}
-	Vector3d Bsurface::BSplineSurfacePoint(const std::vector<std::vector<std::vector<double>>> &upolys, const std::vector<std::vector<std::vector<double>>> &vpolys,
+	template<typename Tp, typename knotT, typename valueT>
+	Vector3d Bsurface<Tp, knotT, valueT>::BSplineSurfacePoint(const std::vector<std::vector<std::vector<double>>> &upolys, const std::vector<std::vector<std::vector<double>>> &vpolys,
 									   const std::vector<std::vector<std::vector<double>>> &tpolys, double u, double v, double t, const std::vector<double> &UKV, const std::vector<double> &VKV,
 									   const std::vector<double> &TKV, const std::vector<std::vector<std::vector<Vector3d>>> &CPs, const int udegree, 
 									   const int vdegree, const int tdegree)
@@ -620,6 +622,8 @@ bool para_to_feasible_is_clean(std::vector<std::vector<std::array<int, 2>>> &par
 	return true;
 }
 // calculate weights and select ACP according to the weight
+// Line 19 in the paper
+// TODO
 Eigen::MatrixXi calculate_active_control_points_from_feasible_control_points(const Eigen::MatrixXi& fcp,const bool v_direction,
 	const std::vector<double> &Uknot, const std::vector<double> &Vknot, 
 	const Eigen::MatrixXd& paras, const int degree1, const int degree2, 
@@ -722,6 +726,7 @@ Eigen::MatrixXi calculate_active_control_points_from_feasible_control_points(con
 	}
 	return selected_fcp;
 }
+
 std::vector<double> get_iso_line_parameters_from_ACP(const Eigen::MatrixXi&ACP, const int id, const Eigen::MatrixXd& paras, const bool v_direction) {
 	int uv = v_direction ? 1 : 0;// if checking iso-v lines, then we are dealing with V parameters
 	std::vector<double> result;
@@ -734,6 +739,9 @@ std::vector<double> get_iso_line_parameters_from_ACP(const Eigen::MatrixXi&ACP, 
 	}
 	return result;
 }
+
+// Verifies that every parameter index [0, nbr_para) appears at least once
+// in the ACP matrix; logs an error and returns false if ACP are missing.
 bool check_ACP_calidation(const Eigen::MatrixXi& ACP, const int nbr_para) {
 	std::vector<bool> check(nbr_para, false);
 	for (int i = 0; i < ACP.rows(); i++) {
@@ -754,10 +762,12 @@ bool check_ACP_calidation(const Eigen::MatrixXi& ACP, const int nbr_para) {
 }
 
 // return true, then the surface knot fixing for both u and v is finished
+// Main function for knot generation
 bool progressively_generate_interpolation_knot_vectors(const bool v_direction, int degree1, int degree2,
 	std::vector<double>& Uknot, std::vector<double>& Vknot, const std::vector<double> Ugrid, const std::vector<double>& Vgrid,
 	const Eigen::MatrixXi& grid_map, const Eigen::MatrixXd& param, const double per_ours,const double per, 
 	const int target_steps, const bool enable_max_fix_nbr, per_too_large& per_flag) {
+	// Init
 	const int nbr_para = param.rows();
 	std::vector<std::vector<std::array<int, 2>>> para_to_feasible;
 	std::vector<int> feasible_order;// the order of the parameters in FCP
@@ -767,6 +777,7 @@ bool progressively_generate_interpolation_knot_vectors(const bool v_direction, i
 		// this means the per_ours should be smaller
 		return false;
 	}
+	// active control points
 	Eigen::MatrixXi ACP =
 #ifdef NO_SELECTING_ACP
 		FCP;
@@ -883,8 +894,8 @@ std::vector<double> update_knot_vector_based_on_grid(const int degree1, const in
 	}
 	return Utemp;
 }
-
-void Bsurface::generate_interpolation_knot_vectors( int degree1, int degree2,
+template<typename Tp, typename knotT, typename valueT>
+void Bsurface<Tp, knotT, valueT>::generate_interpolation_knot_vectors( int degree1, int degree2,
 	std::vector<double>& Uknot, std::vector<double>& Vknot,
 	const Eigen::MatrixXd& param_original, 
 	const double per_ours,const double per, const int target_steps, const bool enable_max_fix_nbr, per_too_large &per_flag) {
@@ -898,14 +909,13 @@ void Bsurface::generate_interpolation_knot_vectors( int degree1, int degree2,
 	std::vector<double> Utemp = Uknot, Vtemp = Vknot;
 	// initialize U
 	Utemp=update_knot_vector_based_on_grid(degree1, degree2, true, Ugrid, Vgrid, grid_map, per, Utemp);
-
 	std::cout << "finished initialize Uknot" << std::endl;
-	print_vector(Utemp);
 
 	// initialize V
 	Vtemp = update_knot_vector_based_on_grid(degree1, degree2, false, Ugrid, Vgrid, grid_map, per, Vtemp);
 	std::cout << "finished initialize Vknot" << std::endl;
-	print_vector(Vtemp);
+
+	// Main loop conditions
 	bool finished = false;
 	bool v_direction;// = start_from_v_direction;
 	if (Utemp.size() > Vtemp.size()) {// iso-v line, update V
@@ -914,28 +924,17 @@ void Bsurface::generate_interpolation_knot_vectors( int degree1, int degree2,
 	else {
 		v_direction = false;
 	}
-	
+	// Main loop
 	while (!finished) {
 		finished = progressively_generate_interpolation_knot_vectors(v_direction, degree1, degree2,
 			Utemp, Vtemp, Ugrid, Vgrid, grid_map, param_original, per_ours, per, target_steps, enable_max_fix_nbr,
 			per_flag);
 		if (per_flag.flag == false) {
-			// per_ours need to be reduced
 			return;
 		}
 		v_direction = !v_direction;
-		/*if (!finished) {
-			std::cout << "switched, UV size "<<Utemp.size()<<" "<<Vtemp.size() << std::endl;
-
-		}*/
 	}
-	print_vector(Utemp);
-	print_vector(Vtemp);
 
-	//std::cout << "Uknot Vknot size "<< Utemp.size()<<" "<<Vtemp.size() << std::endl;
-
-	
-	
 	std::cout << "knot fixing finished, sizes " << Utemp.size() << " " << Vtemp.size() << std::endl;
 	// post processing
 	bool post_processing = false;
@@ -974,8 +973,8 @@ void Bsurface::generate_interpolation_knot_vectors( int degree1, int degree2,
 	return;
 }
 
-
-void Bsurface::generate_interpolation_knot_vectors(int degree1, int degree2,
+template<typename Tp, typename knotT, typename valueT>
+void Bsurface<Tp, knotT, valueT>::generate_interpolation_knot_vectors(int degree1, int degree2,
 	std::vector<double>& Uknot, std::vector<double>& Vknot,
 	const Eigen::MatrixXd& param_original, 
 	double &per_ours, const double per, const int target_steps, const bool enable_max_fix_nbr) {
@@ -996,7 +995,8 @@ void Bsurface::generate_interpolation_knot_vectors(int degree1, int degree2,
 	per_ours = per_ours_tmp;
 	return;	
 }
-double Bsurface::max_interpolation_err(const Eigen::MatrixXd&ver, const Eigen::MatrixXd& param, Bsurface& surface) {
+template<typename Tp, typename knotT, typename valueT>
+double Bsurface<Tp, knotT, valueT>::max_interpolation_err(const Eigen::MatrixXd&ver, const Eigen::MatrixXd& param, Bsurface& surface) {
 	double err = 0;
 	for (int i = 0; i < ver.rows(); i++) {
 		Vector3d v = ver.row(i);
@@ -1011,8 +1011,9 @@ double Bsurface::max_interpolation_err(const Eigen::MatrixXd&ver, const Eigen::M
 	return err;
 }
 // calculate interpolation error for approximation/interpolation method
-Eigen::MatrixXd Bsurface::interpolation_err_for_apprximation(const Eigen::MatrixXd&ver, 
-	const Eigen::MatrixXd& param, Bsurface& surface,double &max_err) {
+template<typename Tp, typename knotT, typename valueT>
+Eigen::MatrixXd Bsurface<Tp, knotT, valueT>::interpolation_err_for_apprximation(const Eigen::MatrixXd&ver, 
+	const Eigen::MatrixXd& param, Bsurface<Tp, knotT, valueT>& surface,double &max_err) {
 	Eigen::MatrixXd result(ver.rows(), ver.cols());
 	double err = 0;
 	for (int i = 0; i < ver.rows(); i++) {
@@ -1030,8 +1031,8 @@ Eigen::MatrixXd Bsurface::interpolation_err_for_apprximation(const Eigen::Matrix
 	max_err = err;
 	return result;
 }
-
-void B_spline_surface_to_mesh(Bsurface &surface, const int pnbr, Eigen::MatrixXd &ver, Eigen::MatrixXi& faces) {
+template<typename Tp, typename knotT, typename valueT>
+void B_spline_surface_to_mesh(Bsurface<Tp, knotT, valueT> &surface, const int pnbr, Eigen::MatrixXd &ver, Eigen::MatrixXi& faces) {
 	std::vector<std::vector<Vector3d>> pts;
 	ver.resize(pnbr*pnbr, 3);
 	int verline = 0;
@@ -1054,7 +1055,8 @@ void B_spline_surface_to_mesh(Bsurface &surface, const int pnbr, Eigen::MatrixXd
 	}
 	std::cout<<"the surface is converted into a mesh\n";
 }
-void Bsurface::RefineKnots(int nbr)
+template<typename Tp, typename knotT, typename valueT>
+void Bsurface<Tp, knotT, valueT>::RefineKnots(int nbr)
 {
 	bool uorv = false; // 0 : u, 1 : v
 	int accumulate = 0;
@@ -1113,38 +1115,10 @@ void Bsurface::RefineKnots(int nbr)
 		print_vector(V);
 	return;
 }
-
-void Bsurface::surface_visulization(Bsurface& surface, const int nbr, Eigen::MatrixXd & v, Eigen::MatrixXi &f) {
+template<typename Tp, typename knotT, typename valueT>
+void Bsurface<Tp, knotT, valueT>::surface_visulization(Bsurface<Tp, knotT, valueT>& surface, const int nbr, Eigen::MatrixXd & v, Eigen::MatrixXi &f) {
 	B_spline_surface_to_mesh(surface, nbr, v, f);
 	return;
 }
-// void surface_visulization(std::vector<Bsurface>& surfaces, const int pnbr, Eigen::MatrixXd & ver, 
-// 	Eigen::MatrixXi &faces, const int without) {
-// 	std::vector<std::vector<Vector3d>> pts;
-// 	ver.resize(pnbr*pnbr, 3);
-// 	int verline = 0;
-// 	for (int i = 0; i < pnbr; i++) {
-// 		for (int j = 0; j < pnbr; j++) {
-// 			double upara = double(i) / (pnbr - 1);
-// 			double vpara = double(j) / (pnbr - 1);
-// 			ver.row(verline) = Vector3d(0, 0, 0);
-// 			for (int si = 0; si < surfaces.size()- without; si++) {
-// 				ver.row(verline) += BSplineSurfacePoint(surfaces[si], upara, vpara);
-// 			}
-			
-// 			verline++;
-// 		}
-// 	}
-// 	faces.resize(2 * (pnbr - 1)*(pnbr - 1), 3);
-// 	int fline = 0;
-// 	for (int i = 0; i < pnbr - 1; i++) {
-// 		for (int j = 0; j < pnbr - 1; j++) {
-// 			faces.row(fline) = Vector3i(i + pnbr * (j + 1), i + pnbr * j, i + pnbr * (1 + j) + 1);
-// 			faces.row(fline + 1) = Vector3i(i + pnbr * (1 + j) + 1, i + pnbr * j, i + pnbr * j + 1);
-// 			fline += 2;
-// 		}
-// 	}
-// 	return;
-// }
 
 }

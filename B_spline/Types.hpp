@@ -22,7 +22,6 @@ namespace SIBSplines
 		bool flag;
 	};
 	
-	// Ply done templating for AD but I could maybe need functions to hande different cases for AD types -> new functions
 	template <typename Tp, typename knotT, typename valueT>
 	class ply_operations
 	{
@@ -68,10 +67,10 @@ namespace SIBSplines
 												 const Eigen::MatrixXd &param_original,
 												 const double per_ours, const double per, const int target_steps, const bool enable_max_fix_nbr, per_too_large &per_flag);
 		void solve_control_points_for_fairing_surface(Bsurface &surface, const Eigen::MatrixXd &paras,
-													  const Eigen::MatrixXd &points, PartialBasis &basis);
+													  const Eigen::MatrixXd &points, PartialBasis<Tp, knotT, valueT> &basis);
 		// calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
 		// Could be important for AD
-		Eigen::MatrixXd surface_energy_calculation(Bsurface &surface, PartialBasis &basis,
+		Eigen::MatrixXd surface_energy_calculation(Bsurface<Tp, knotT, valueT> &surface, PartialBasis<Tp, knotT, valueT> &basis,
 												   const int discrete, Eigen::MatrixXd &energy_uu, Eigen::MatrixXd &energy_vv, Eigen::MatrixXd &energy_uv);
 
 		// [U[which],U[which+1]) is the problematic one
@@ -178,7 +177,7 @@ namespace SIBSplines
 	{
 	public:
 		// PartialBasis(PolynomialBasis& basis, Bsurface& surface);
-		PartialBasis(Bsurface<Tp, knotT, valueT>& &surface);
+		PartialBasis(Bsurface<Tp, knotT, valueT> &surface);
 		PartialBasis();
 		void init(Bsurface<Tp, knotT, valueT> &surface);
 		void init(PolynomialBasis<Tp, knotT, valueT> &pb);
