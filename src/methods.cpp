@@ -139,10 +139,8 @@ namespace SIBSplines {
         Eigen::MatrixXd ver;
         Eigen::MatrixXi F;
         Eigen::MatrixXd param, paramout;
-        // std::string modelname = "tiger.obj";
-        // std::string meshfile = example_root_path + modelname;
         std::cout << "reading mesh model: " << meshfile << std::endl;
-		auto func = TinyAD::scalar_function<2>(TinyAD::range(param.size()));
+		
         // mesh parametrization, and print out the parametrization result as a obj mesh.
         mesh_parameterization(meshfile, ver, param, F);
         paramout.resize(param.rows(), 3);
@@ -170,10 +168,20 @@ namespace SIBSplines {
         int visual_nbr = 200; // the discretization scale for the output surface. The mesh will be 200x200
 
         // basis contains all the basis functions and their 1 and 2 order diffenrential form.
-        PartialBasis basis(surface);
+        //PartialBasis basis(surface);
+		
+		// Param size = 2 * pts + 3 * cp
+		auto func = TinyAD::scalar_function<2>(TinyAD::range(param.size()));
+		func.add_elements<20>(TinyAD::range(10), [&](auto &element) -> TINYAD_SCALAR_TYPE(element) {
+			using T = TINYAD_SCALAR_TYPE(element);
+			SurfaceOpt<T, T> sOpt(surface);
+			PartialBasis<T,T> basis(surface);
+        	sOpt.solve_control_points_for_fairing_surface(surface, param, ver, basis);
+		});
+			//func.add_element
+        	// 	solve the control points to obtain the surface.
+			
 
-        // 	solve the control points to obtain the surface.
-        surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
         std::cout << "surface solved" << std::endl;
 
 		/* ///////////////////////
@@ -196,7 +204,7 @@ namespace SIBSplines {
 	// Optimized for all the variables using TinyAD as a autodifferenciation.
     void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, const std::string path, const std::string tail,
 	const double per, const bool enable_local_energy) {
-		// Timer variables
+		/*// Timer variables
 		igl::Timer timer;
 		double time_knot = 0;
 		double time_solve = 0;
@@ -323,6 +331,6 @@ namespace SIBSplines {
 			write_svg_pts(path + "ours_" + "p" + std::to_string(nbr) + "_m_" + std::to_string(method) + tail + "param.svg", param);
 			write_svg_knot_vectors(path + "ours_" + "p" + std::to_string(nbr) + "_m_" + std::to_string(method) + tail + "knots.svg", surface.U, surface.V);
 		}
-		std::cout << "total time " << time_knot + time_solve << std::endl;
+		std::cout << "total time " << time_knot + time_solve << std::endl;*/
     }
 }

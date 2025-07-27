@@ -21,29 +21,24 @@ namespace SIBSplines
 	{
 		bool flag;
 	};
-	
-	template <typename Tp, typename knotT, typename valueT>
+	// Should be templated for evaluation
+	template <typename Tp, typename valueT>
 	class ply_operations
 	{
 	public:
 		ply_operations() {};
     	~ply_operations() {};
-		// Doesn't work I guess with TinyAD since its ad types and not double.
-		//template <typename Tp, typename knotT, typename valueT>
-		//std::vector<knotT> polynomial_simplify(const std::vector<Tp> &poly);
-		
-		std::vector<knotT> polynomial_add(const std::vector<knotT> &poly1, const std::vector<knotT> &poly2);
-		std::vector<knotT> polynomial_times(const std::vector<knotT> &poly1, const std::vector<knotT> &poly2);
+		std::vector<Tp> polynomial_add(const std::vector<Tp> &poly1, const std::vector<Tp> &poly2);
+		std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const std::vector<Tp> &poly2);
 		std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const Tp &nbr);
 		Tp power(const valueT &value, const int order);
-		Tp polynomial_value(const std::vector<knotT> &poly, const valueT para);
+		Tp polynomial_value(const std::vector<Tp> &poly, const valueT para);
 		std::vector<Tp> polynomial_integration(const std::vector<Tp> &poly);
 		Tp polynomial_integration(const std::vector<Tp> &poly, const Tp lower, const Tp upper);
 	};
 	
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	class PartialBasis;
-	template<typename Tp, typename knotT, typename valueT>
 	class Bsurface
 	{
 	public:
@@ -66,15 +61,7 @@ namespace SIBSplines
 												 std::vector<double> &Uknot, std::vector<double> &Vknot,
 												 const Eigen::MatrixXd &param_original,
 												 const double per_ours, const double per, const int target_steps, const bool enable_max_fix_nbr, per_too_large &per_flag);
-		void solve_control_points_for_fairing_surface(Bsurface &surface, const Eigen::MatrixXd &paras,
-													  const Eigen::MatrixXd &points, PartialBasis<Tp, knotT, valueT> &basis);
-		// calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
-		// Could be important for AD
-		Eigen::MatrixXd surface_energy_calculation(Bsurface<Tp, knotT, valueT> &surface, PartialBasis<Tp, knotT, valueT> &basis,
-												   const int discrete, Eigen::MatrixXd &energy_uu, Eigen::MatrixXd &energy_vv, Eigen::MatrixXd &energy_uv);
 
-		// [U[which],U[which+1]) is the problematic one
-		// Same case here
 		void detect_max_energy_interval(Bsurface &surface, const Eigen::MatrixXd &energy, const Eigen::MatrixXd &energy_uu,
 										const Eigen::MatrixXd &energy_vv, bool &uorv, int &which, double &em);
 		
@@ -115,8 +102,29 @@ namespace SIBSplines
 			}
 		}
 	};
-	
-	
+	template<typename Tp, typename valueT>
+	class SurfaceOpt {
+		public:
+			SurfaceOpt(Bsurface &surface);
+			~SurfaceOpt();
+			int degree1;
+			int degree2;
+			std::vector<double> U;
+			std::vector<double> V;
+			double upara;
+			double vpara;
+			std::vector<std::vector<Vector3d>> control_points;
+			void init(Bsurface &surface);
+			void clear();
+			void solve_control_points_for_fairing_surface(Bsurface &surface, const Eigen::MatrixXd &paras,
+													  const Eigen::MatrixXd &points, PartialBasis<Tp,  valueT> &basis);
+			// calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
+			// Could be important for AD
+			Eigen::MatrixXd surface_energy_calculation(Bsurface &surface, PartialBasis<Tp,  valueT> &basis,
+													const int discrete, Eigen::MatrixXd &energy_uu, Eigen::MatrixXd &energy_vv, Eigen::MatrixXd &energy_uv);
+		
+	};
+	// 
 	class Bcurve
 	{
 	public:
@@ -146,13 +154,13 @@ namespace SIBSplines
 		Vector3d BsplinePoint(const int degree, const std::vector<double> &U, const double para,
 							  const Eigen::MatrixXd &pts);
 	};
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	class PolynomialBasis
 	{
 	public:
-		PolynomialBasis(Bsurface<Tp, knotT, valueT> &surface);// get all the bases of the B-spline surface into polynomial format
+		PolynomialBasis(Bsurface &surface);// get all the bases of the B-spline surface into polynomial format
 		PolynomialBasis();
-		void init(Bsurface<Tp, knotT, valueT> &surface);
+		void init(Bsurface &surface);
 		std::vector<double> poly(const int id, const double value, const bool UVknot);
 		void clear();
 		// the (i,j) th element of the basis is the basis function defined on {U_i,U_{i+1}}, the j ranges from 0 to degree.
@@ -162,7 +170,7 @@ namespace SIBSplines
 		std::vector<double> Vknot;
 		int degree1;
 		int degree2;
-		std::vector<std::vector<std::vector<Tp>>> calculate_single(const int degree, const std::vector<knotT> &knotVector);
+		std::vector<std::vector<std::vector<Tp>>> calculate_single(const int degree, const std::vector<Tp> &knotVector);
 		
 	private:
 		int nu;
@@ -171,16 +179,16 @@ namespace SIBSplines
 		std::vector<std::vector<std::vector<double>>> calculate(const bool uorv); // 0 checking u; 1 checking v
 	};
 
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	// get the first or second partial differential polynomial of U or V knot vectors
 	class PartialBasis
 	{
 	public:
 		// PartialBasis(PolynomialBasis& basis, Bsurface& surface);
-		PartialBasis(Bsurface<Tp, knotT, valueT> &surface);
+		PartialBasis(Bsurface &surface);
 		PartialBasis();
-		void init(Bsurface<Tp, knotT, valueT> &surface);
-		void init(PolynomialBasis<Tp, knotT, valueT> &pb);
+		void init(Bsurface &surface);
+		void init(PolynomialBasis<Tp,  valueT> &pb);
 		// return a certain basis (in 0, 1 or 2 order partial differential) of N_{id}(value)
 		// UVknot==1 -> check v
 		std::vector<double> poly(const int id, const double value, const bool UVknot, int partial);
@@ -215,7 +223,7 @@ namespace SIBSplines
 	void print_vector(const std::vector<double> &input);
 	void print_vector(const std::vector<int> &input);
 
-	template <typename Tp, typename knotT, typename valueT>
+	template <typename Tp, typename valueT>
 	std::vector<Tp> Nip_func(const int i, const int p, const double u, const std::vector<double> &U);
 
 	std::vector<double> knot_vector_insert_one_value(const std::vector<double> &U, const double value);

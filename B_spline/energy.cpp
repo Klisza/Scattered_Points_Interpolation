@@ -12,10 +12,10 @@ namespace SIBSplines{
 	double time0 = 0, time1 = 0, time2 = 0, time3 = 0;
 	
 	// These functions handle the polynomials.
-	template <typename Tp, typename knotT, typename valueT>
-	std::vector<knotT> ply_operations<Tp, knotT, valueT>::polynomial_add(const std::vector<knotT>& poly1, const std::vector<knotT>& poly2) {
+	template <typename Tp, typename valueT>
+	std::vector<Tp> ply_operations<Tp, valueT>::polynomial_add(const std::vector<Tp>& poly1, const std::vector<Tp>& poly2) {
 		int size = std::max(poly1.size(), poly2.size());
-		std::vector<knotT> result(size);
+		std::vector<Tp> result(size);
 		for (int i = 0; i < size; i++) {
 			bool flag1 = i < poly1.size();
 			bool flag2 = i < poly2.size();
@@ -29,13 +29,13 @@ namespace SIBSplines{
 				result[i] = poly2[i];
 			}
 		}
-		return result;//ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
+		return result;//ply_operations<Tp, valueT>::polynomial_simplify(result);
 	}
 	// Cauchy product/Polynomial product
-	template <typename Tp, typename knotT, typename valueT>
-	std::vector<knotT> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<knotT>& poly1, const std::vector<knotT>& poly2) {
+	template <typename Tp, typename valueT>
+	std::vector<Tp> ply_operations<Tp, valueT>::polynomial_times(const std::vector<Tp>& poly1, const std::vector<Tp>& poly2) {
 		int size = poly1.size() + poly2.size() - 1;
-		std::vector<knotT> result(size);
+		std::vector<Tp> result(size);
 		for (int i = 0; i < size; i++) {// initialize the result
 			result[i] = 0;
 		}
@@ -45,11 +45,11 @@ namespace SIBSplines{
 				result[i + j] += poly1[i] * poly2[j];
 			}
 		}
-		return result; //ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
+		return result; //ply_operations<Tp, valueT>::polynomial_simplify(result);
 	}
 	// Scalar multiplication
-	template <typename Tp, typename knotT, typename valueT>
-	std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<Tp>& poly1, const Tp& nbr) {
+	template <typename Tp, typename valueT>
+	std::vector<Tp> ply_operations<Tp, valueT>::polynomial_times(const std::vector<Tp>& poly1, const Tp& nbr) {
 		std::vector<Tp> result;
 		result = poly1;
 		for (int i = 0; i < result.size(); i++) {
@@ -59,8 +59,8 @@ namespace SIBSplines{
 		return result;
 	}
 	// This might need to be updated to work on TinyAD since it should use polynomial_times because of the AD type.
-	template <typename Tp, typename knotT, typename valueT>
-	Tp ply_operations<Tp, knotT, valueT>::power(const valueT &value, const int order)
+	template <typename Tp, typename valueT>
+	Tp ply_operations<Tp, valueT>::power(const valueT &value, const int order)
 	{
 		if (order == 0)
 		{
@@ -73,17 +73,16 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	Tp ply_operations<Tp, knotT, valueT>::polynomial_value(const std::vector<knotT>& poly, const valueT para) {
+	template <typename Tp, typename valueT>
+	Tp ply_operations<Tp, valueT>::polynomial_value(const std::vector<Tp>& poly, const valueT para) {
 		double result = 0;
 		for (int i = 0; i < poly.size(); i++) {
 			result += poly[i] * power(para, i);
 		}
 		return result;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	// I dont know if divison works
-	std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp>& poly) {
+	template <typename Tp, typename valueT>
+	std::vector<Tp> ply_operations<Tp, valueT>::polynomial_integration(const std::vector<Tp>& poly) {
 		std::vector<Tp> result(poly.size() + 1);
 		result[0] = 0;
 		for (int i = 1; i < result.size(); i++) {
@@ -91,8 +90,8 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	Tp ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp>& poly, const Tp lower, const Tp upper) {
+	template <typename Tp, typename valueT>
+	Tp ply_operations<Tp, valueT>::polynomial_integration(const std::vector<Tp>& poly, const Tp lower, const Tp upper) {
 		Tp up = ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), upper);
 		Tp lw = ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), lower);
 		return up - lw;
@@ -124,9 +123,9 @@ namespace SIBSplines{
 	}
 	
 	// TODO!! ///////////// Rewrite it for templated functions.
-	template <typename Tp, typename knotT, typename valueT>
+	template <typename Tp, typename valueT>
 	std::vector<Tp> Nip_func(const int i, const int p, const double u, const std::vector<double> &U) {
-		ply_operations<Tp, knotT, valueT> PO;
+		ply_operations<Tp, valueT> PO;
 		std::vector<Tp> result;
 		if (p == 0) {
 			return Ni0_func(i, u, U);
@@ -138,17 +137,17 @@ namespace SIBSplines{
 				return result;
 			}
 			else {
-				result[0] = 0;
+				result[0] = 0;	
 				return result;
 			}
 		}
 		std::vector<double> v;
 		v = { {-U[i],1} };// u - U[i]
-		std::vector<double> result1 = ply_operations<Tp, knotT, valueT>::polynomial_times(handle_division_func(v, U[i + p] - U[i]), Nip_func(i, p - 1, u, U));
+		std::vector<double> result1 = ply_operations<Tp, valueT>::polynomial_times(handle_division_func(v, U[i + p] - U[i]), Nip_func(i, p - 1, u, U));
 
 		v = { {U[i + p + 1],-1} };// U[i+p+1] - u 
-		std::vector<double> result2 = ply_operations<Tp, knotT, valueT>::polynomial_times(handle_division_func(v, U[i + p + 1] - U[i + 1]), Nip_func(i + 1, p - 1, u, U));
-		return ply_operations<Tp, knotT, valueT>::polynomial_add(result1, result2);
+		std::vector<double> result2 = ply_operations<Tp, valueT>::polynomial_times(handle_division_func(v, U[i + p + 1] - U[i + 1]), Nip_func(i + 1, p - 1, u, U));
+		return ply_operations<Tp, valueT>::polynomial_add(result1, result2);
 	}
 	
 	// Same thing here TinyAD should autodifferenciate this whole thing. ////
@@ -167,8 +166,8 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	void PolynomialBasis<Tp, knotT, valueT>::init(Bsurface<Tp, knotT, valueT>& surface) {
+	template <typename Tp, typename valueT>
+	void PolynomialBasis<Tp, valueT>::init(Bsurface& surface) {
 		Uknot = surface.U;
 		Vknot = surface.V;
 		degree1 = surface.degree1;
@@ -180,24 +179,24 @@ namespace SIBSplines{
 		inited = true;
 		return;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	void PolynomialBasis<Tp, knotT, valueT>::clear() {
+	template <typename Tp, typename valueT>
+	void PolynomialBasis<Tp, valueT>::clear() {
 		Uknot.clear();
 		Vknot.clear();
 		Ubasis.clear();
 		Vbasis.clear();
 		inited = false;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	PolynomialBasis<Tp, knotT, valueT>::PolynomialBasis(Bsurface<Tp, knotT, valueT>& surface) {
+	template <typename Tp, typename valueT>
+	PolynomialBasis<Tp, valueT>::PolynomialBasis(Bsurface& surface) {
 		init(surface);
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	PolynomialBasis<Tp, knotT, valueT>::PolynomialBasis() {
+	template <typename Tp, typename valueT>
+	PolynomialBasis<Tp, valueT>::PolynomialBasis() {
 	}
 	// Poly return the coefficents 
-	template <typename Tp, typename knotT, typename valueT>
-	std::vector<double> PolynomialBasis<Tp, knotT, valueT>::poly(const int id, const double value, const bool UVknot) {
+	template <typename Tp, typename valueT>
+	std::vector<double> PolynomialBasis<Tp, valueT>::poly(const int id, const double value, const bool UVknot) {
 		if (!inited) {
 			std::cout << "WRONG USAGE OF CLASS PolynomialBasis, YOU SHOULD INITIALIZE IT BY CALLING init()" << std::endl;
 		}
@@ -242,8 +241,8 @@ namespace SIBSplines{
 		return result;
 	}
 	// 
-	template<typename Tp, typename knotT, typename valueT>
-	std::vector<std::vector<std::vector<Tp>>> PolynomialBasis<Tp, knotT, valueT>::calculate_single(const int degree, const std::vector<knotT> &knotVector)
+	template<typename Tp, typename valueT>
+	std::vector<std::vector<std::vector<Tp>>> PolynomialBasis<Tp, valueT>::calculate_single(const int degree, const std::vector<Tp> &knotVector)
 	{
 		std::vector<std::vector<std::vector<Tp>>> pl;
 		int n = knotVector.size() - 2 - degree;
@@ -257,7 +256,7 @@ namespace SIBSplines{
 		return pl;
 	}
 	// Should work
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	std::vector<Tp> basisValues(const int whichItv, const int degree, const std::vector<std::vector<std::vector<double>>>&basis, const double param)
 	{
 		std::vector<Tp> result(degree + 1);
@@ -271,12 +270,12 @@ namespace SIBSplines{
 			{
 				std::cout<<"The basis whihcitv is empty, which itv "<<whichItv<<", the size of basis functions "<<basis.size()<<"\n";
 			}
-			result[i] = ply_operations<Tp, knotT, valueT>::polynomial_value(basis[whichItv][i], param);
+			result[i] = ply_operations<Tp, valueT>::polynomial_value(basis[whichItv][i], param);
 		}
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	std::vector<std::vector<std::vector<double>>> PolynomialBasis<Tp, knotT, valueT>::calculate(const bool uorv) {
+	template<typename Tp, typename valueT>
+	std::vector<std::vector<std::vector<double>>> PolynomialBasis<Tp, valueT>::calculate(const bool uorv) {
 		std::vector<double> kv;
 		int degree;
 		int n;
@@ -303,8 +302,8 @@ namespace SIBSplines{
 		return pl;
 
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	std::vector<std::vector<std::vector<double>>> PartialBasis<Tp, knotT, valueT>::do_partial(const
+	template<typename Tp, typename valueT>
+	std::vector<std::vector<std::vector<double>>> PartialBasis<Tp, valueT>::do_partial(const
 		std::vector<std::vector<std::vector<double>>>&basis) {
 		std::vector<std::vector<std::vector<double>>> result(basis.size());
 		for (int i = 0; i < basis.size(); i++) {
@@ -316,15 +315,15 @@ namespace SIBSplines{
 		return result;
 	}
 
-	template<typename Tp, typename knotT, typename valueT>
-	PartialBasis<Tp, knotT, valueT>::PartialBasis(Bsurface<Tp, knotT, valueT>& surface) {
+	template<typename Tp, typename valueT>
+	PartialBasis<Tp, valueT>::PartialBasis(Bsurface& surface) {
 		init(surface);
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	PartialBasis<Tp, knotT, valueT>::PartialBasis() {
+	template<typename Tp, typename valueT>
+	PartialBasis<Tp, valueT>::PartialBasis() {
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void PartialBasis<Tp, knotT, valueT>::init(Bsurface<Tp, knotT, valueT>& surface) {
+	template<typename Tp, typename valueT>
+	void PartialBasis<Tp, valueT>::init(Bsurface& surface) {
 		PolynomialBasis pb(surface);
 		Ubasis = pb.Ubasis;
 		Vbasis = pb.Vbasis;
@@ -335,8 +334,8 @@ namespace SIBSplines{
 		degree1 = surface.degree1;
 		degree2 = surface.degree2;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void PartialBasis<Tp, knotT, valueT>::init(PolynomialBasis<Tp, knotT, valueT> &pb){
+	template<typename Tp, typename valueT>
+	void PartialBasis<Tp, valueT>::init(PolynomialBasis<Tp, valueT> &pb){
 		Ubasis = pb.Ubasis;
 		Vbasis = pb.Vbasis;
 		Ubasis_1 = do_partial(Ubasis); Vbasis_1 = do_partial(Vbasis);
@@ -346,8 +345,8 @@ namespace SIBSplines{
 		degree1 = pb.degree1;
 		degree2 = pb.degree2;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void PartialBasis<Tp, knotT, valueT>::clear() {
+	template<typename Tp, typename valueT>
+	void PartialBasis<Tp, valueT>::clear() {
 		Uknot.clear();
 		Vknot.clear();
 		Ubasis.clear();
@@ -358,8 +357,8 @@ namespace SIBSplines{
 		Vbasis_2.clear();
 	}
 	// What exact type should this function be
-	template<typename Tp, typename knotT, typename valueT>
-	std::vector<double> PartialBasis<Tp, knotT, valueT>::poly(const int id, const double value, const bool UVknot, int partial) {
+	template<typename Tp, typename valueT>
+	std::vector<double> PartialBasis<Tp, valueT>::poly(const int id, const double value, const bool UVknot, int partial) {
 		std::vector<double> kv;
 		int degree;
 
@@ -416,10 +415,10 @@ namespace SIBSplines{
 	
 	// construct an integration of multiplication of two B-spline basis (intergration of partial(Ni1)*partial(Ni2))
 	// the integration domain is [u1, u2]
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	double construct_an_integration(const int degree, const std::vector<double>& U,
 		const int partial1, const int partial2, const int i1, const int i2, const double u1, const double u2,
-		PolynomialBasis<Tp, knotT, valueT> &basis, const bool uv) {
+		PolynomialBasis<Tp, valueT> &basis, const bool uv) {
 		timer.start();
 		std::vector<double> func1 = basis.poly(i1, u1, uv);
 		//Nip_func(i1, degree, u1, U);
@@ -450,23 +449,23 @@ namespace SIBSplines{
 		//print_vector(func1);
 		//print_vector(func2);
 		timer.start();
-		std::vector<double> func = ply_operations<Tp, knotT, valueT>::polynomial_times(func1, func2);
+		std::vector<double> func = ply_operations<Tp, valueT>::polynomial_times(func1, func2);
 		//std::cout << "times" << std::endl;
 		//print_vector(func);
 		double upper = u2;
 		if (u2 == U.back()) {
 			upper = U.back() - SCALAR_ZERO;
 		}
-		double result = ply_operations<Tp, knotT, valueT>::polynomial_integration(func, u1, upper);
+		double result = ply_operations<Tp, valueT>::polynomial_integration(func, u1, upper);
 		timer.stop();
 		time2 += timer.getElapsedTimeInMilliSec();
 
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	double construct_an_integration(const int degree, const std::vector<double>& U,
 		const int partial1, const int partial2, const int i1, const int i2, const double u1, const double u2,
-		PartialBasis<Tp, knotT, valueT> &basis, const bool uv) {
+		PartialBasis<Tp, valueT> &basis, const bool uv) {
 		timer.start();
 		//std::vector<double> func1 = basis.poly(i1, u1, uv);
 		//std::vector<double> func2 = basis.poly(i2, u1, uv);	
@@ -480,19 +479,19 @@ namespace SIBSplines{
 		time1 += timer.getElapsedTimeInMilliSec();
 
 		timer.start();
-		std::vector<double> func = ply_operations<Tp, knotT, valueT>::polynomial_times(func1, func2);
+		std::vector<double> func = ply_operations<Tp, valueT>::polynomial_times(func1, func2);
 
 		double upper = u2;
 		if (u2 == U.back()) {
 			upper = U.back() - SCALAR_ZERO;
 		}
-		double result = ply_operations<Tp, knotT, valueT>::polynomial_integration(func, u1, upper);
+		double result = ply_operations<Tp, valueT>::polynomial_integration(func, u1, upper);
 		timer.stop();
 		time2 += timer.getElapsedTimeInMilliSec();
 
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	// construct an integration of multiplication of two B-spline basis (intergration of partial(Ni1)*partial(Ni2))
 	// the integration domain is [u1, u2]
 	double construct_an_integration(const int degree, const std::vector<double>& U,
@@ -515,14 +514,14 @@ namespace SIBSplines{
 		//print_vector(func1);
 		//print_vector(func2);
 		timer.start();
-		std::vector<double> func = ply_operations<Tp, knotT, valueT>::polynomial_times(func1, func2);
+		std::vector<double> func = ply_operations<Tp, valueT>::polynomial_times(func1, func2);
 		//std::cout << "times" << std::endl;
 		//print_vector(func);
 		double upper = u2;
 		if (u2 == U.back()) {
 			upper = U.back() - SCALAR_ZERO;
 		}
-		double result = ply_operations<Tp, knotT, valueT>::polynomial_integration(func, u1, upper);
+		double result = ply_operations<Tp, valueT>::polynomial_integration(func, u1, upper);
 		timer.stop();
 		time2 += timer.getElapsedTimeInMilliSec();
 
@@ -530,8 +529,8 @@ namespace SIBSplines{
 	}
 	
 	// do partial difference to Pi, the cofficient of jth element Pj.
-	template<typename Tp, typename knotT, typename valueT>
-	double surface_energy_least_square(Bsurface<Tp, knotT, valueT>& surface, const int i, const int j, PartialBasis<Tp, knotT, valueT>& basis) {
+	template<typename Tp, typename valueT>
+	double surface_energy_least_square(Bsurface& surface, const int i, const int j, PartialBasis<Tp, valueT>& basis) {
 		// figure out which Pij corresponding to the ith control point
 		int partial_i = i / (surface.nv() + 1);
 		int partial_j = i - partial_i * (surface.nv() + 1);
@@ -583,9 +582,9 @@ namespace SIBSplines{
 	}
 
 	// do partial difference to Pi, the cofficient of jth element Pj.
-	template<typename Tp, typename knotT, typename valueT>
-	double surface_energy_least_square_tripletes(Bsurface<Tp, knotT, valueT>& surface, const int partial_i, const int partial_j,
-	const int coff_i, const int coff_j, PartialBasis<Tp, knotT, valueT>& basis) {
+	template<typename Tp, typename valueT>
+	double surface_energy_least_square_tripletes(Bsurface& surface, const int partial_i, const int partial_j,
+	const int coff_i, const int coff_j, PartialBasis<Tp, valueT>& basis) {
 		// figure out which Pij corresponding to the ith control point
 		
 
@@ -631,19 +630,19 @@ namespace SIBSplines{
 
 	}
 	// in interval [U[i], U[i+1])x[V[j], V[j+1])
-	template<typename Tp, typename knotT, typename valueT>
+	template<typename Tp, typename valueT>
 	double discrete_surface_partial_value_squared(const int partial1, const int partial2,
-		const int i, const int j, Bsurface<Tp, knotT, valueT>& surface,
-		PartialBasis<Tp, knotT, valueT>& basis, const double u, const double v) {
+		const int i, const int j, Bsurface& surface,
+		PartialBasis<Tp, valueT>& basis, const double u, const double v) {
 		int p = surface.degree1;
 		int q = surface.degree2;
 		Eigen::VectorXd Nl(p + 1);
 		Eigen::VectorXd Nr(q + 1);
 		for (int k = 0; k < p + 1; k++) {
-			Nl[k] = ply_operations<Tp, knotT, valueT>::polynomial_value(basis.poly(i - p + k, u, 0, partial1), u);
+			Nl[k] = ply_operations<Tp, valueT>::polynomial_value(basis.poly(i - p + k, u, 0, partial1), u);
 		}
 		for (int k = 0; k < q + 1; k++) {
-			Nr[k] = ply_operations<Tp, knotT, valueT>::polynomial_value(basis.poly(j - q + k, v, 1, partial2), v);
+			Nr[k] = ply_operations<Tp, valueT>::polynomial_value(basis.poly(j - q + k, v, 1, partial2), v);
 		}
 		Eigen::MatrixXd px(p + 1, q + 1), py(p + 1, q + 1), pz(p + 1, q + 1);
 		for (int k1 = 0; k1 < p + 1; k1++) {
@@ -660,8 +659,8 @@ namespace SIBSplines{
 	}
 
 	// calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd Bsurface<Tp, knotT, valueT>::surface_energy_calculation(Bsurface<Tp, knotT, valueT>& surface, PartialBasis<Tp, knotT, valueT>& basis,
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd SurfaceOpt<Tp, valueT>::surface_energy_calculation(Bsurface& surface, PartialBasis<Tp, valueT>& basis,
 		const int discrete, Eigen::MatrixXd &energy_uu, Eigen::MatrixXd &energy_vv, Eigen::MatrixXd& energy_uv) {
 		int p = surface.degree1;
 		int q = surface.degree2;
@@ -731,8 +730,7 @@ namespace SIBSplines{
 	}
 
 	// [U[which],U[which+1]) is the problematic one
-	template<typename Tp, typename knotT, typename valueT>
-	void Bsurface<Tp, knotT, valueT>::detect_max_energy_interval(Bsurface& surface, const Eigen::MatrixXd& energy, const Eigen::MatrixXd &energy_uu,
+	void Bsurface::detect_max_energy_interval(Bsurface& surface, const Eigen::MatrixXd& energy, const Eigen::MatrixXd &energy_uu,
 		const Eigen::MatrixXd & energy_vv, bool& uorv, int &which, double& em) {
 		int k1, k2;
 		em = 0;
@@ -764,8 +762,8 @@ namespace SIBSplines{
 
 
 	// which_part = 0: Suu; which_part = 1, Suv; which_part = 2, Svv.
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd energy_part_of_surface_least_square(Bsurface<Tp, knotT, valueT>& surface, PartialBasis<Tp, knotT, valueT>& basis) {
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd energy_part_of_surface_least_square(Bsurface& surface, PartialBasis<Tp, valueT>& basis) {
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		Eigen::MatrixXd result(psize, psize);
 		for (int i = 0; i < psize; i++) {
@@ -777,8 +775,8 @@ namespace SIBSplines{
 		std::cout << "energy matrix finish calculation" << std::endl;
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void energy_part_of_surface_least_square(Bsurface<Tp, knotT, valueT>& surface, PartialBasis<Tp, knotT, valueT>& basis, std::vector<Trip>& tripletes)
+	template<typename Tp, typename valueT>
+	void energy_part_of_surface_least_square(Bsurface& surface, PartialBasis<Tp, valueT>& basis, std::vector<Trip>& tripletes)
 	{
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		int degree1 = surface.degree1, degree2 = surface.degree2;
@@ -816,8 +814,8 @@ namespace SIBSplines{
 		}
 
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	double surface_error_least_square(Bsurface<Tp, knotT, valueT>& surface, const int i, const int j,
+	template<typename Tp, typename valueT>
+	double surface_error_least_square(Bsurface& surface, const int i, const int j,
 		const Eigen::MatrixXd& paras) {
 		// figure out which Pij corresponding to the ith control point
 		int partial_i = i / (surface.nv() + 1);
@@ -851,8 +849,8 @@ namespace SIBSplines{
 		return result;
 
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd error_part_of_surface_least_square(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras) {
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd error_part_of_surface_least_square(Bsurface& surface, const Eigen::MatrixXd& paras) {
 		// figure out which Pij corr) {
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		Eigen::MatrixXd result(psize, psize);
@@ -865,8 +863,8 @@ namespace SIBSplines{
 		std::cout << "error matrix finish calculation" << std::endl;
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::VectorXd right_part_of_least_square_approximation(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras,
+	template<typename Tp, typename valueT>
+	Eigen::VectorXd right_part_of_least_square_approximation(Bsurface& surface, const Eigen::MatrixXd& paras,
 		const Eigen::MatrixXd& ver, const int dimension) {
 
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
@@ -891,8 +889,8 @@ namespace SIBSplines{
 		}
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd eqality_part_of_surface_least_square(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras) {
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd eqality_part_of_surface_least_square(Bsurface& surface, const Eigen::MatrixXd& paras) {
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		Eigen::MatrixXd result(paras.rows(), psize);
 		int degree1 = surface.degree1;
@@ -915,8 +913,8 @@ namespace SIBSplines{
 		return result;
 	}
 	// this function generate ld and ru.
-	template<typename Tp, typename knotT, typename valueT>
-	void eqality_part_of_surface_least_square(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras, int shifti, int shiftj, std::vector<Trip>& tripletes) {
+	template<typename Tp, typename valueT>
+	void eqality_part_of_surface_least_square(Bsurface& surface, const Eigen::MatrixXd& paras, int shifti, int shiftj, std::vector<Trip>& tripletes) {
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		// Eigen::MatrixXd result(paras.rows(), psize);
 		int degree1 = surface.degree1;
@@ -941,15 +939,15 @@ namespace SIBSplines{
 		return;
 	}
 
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd lambda_part_of_surface_least_square(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras) {
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd lambda_part_of_surface_least_square(Bsurface& surface, const Eigen::MatrixXd& paras) {
 		Eigen::MatrixXd A = eqality_part_of_surface_least_square(surface, paras);
 		Eigen::MatrixXd result = -A.transpose();
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd surface_least_square_lambda_multiplier_left_part(Bsurface<Tp, knotT, valueT>& surface,
-		const Eigen::MatrixXd& paras, PartialBasis<Tp, knotT, valueT>& basis) {
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd surface_least_square_lambda_multiplier_left_part(Bsurface& surface,
+		const Eigen::MatrixXd& paras, PartialBasis<Tp, valueT>& basis) {
 		std::cout << "inside left part" << std::endl;
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		int target_size = paras.rows();// nbr of target data points
@@ -974,9 +972,9 @@ namespace SIBSplines{
 			ld, rd;
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void surface_least_square_lambda_multiplier_left_part(Bsurface<Tp, knotT, valueT>& surface,
-		const Eigen::MatrixXd& paras, PartialBasis<Tp, knotT, valueT>& basis, std::vector<Trip>& tripletes) {
+	template<typename Tp, typename valueT>
+	void surface_least_square_lambda_multiplier_left_part(Bsurface& surface,
+		const Eigen::MatrixXd& paras, PartialBasis<Tp, valueT>& basis, std::vector<Trip>& tripletes) {
 		std::cout << "inside left part" << std::endl;
 		tripletes.clear();
 		
@@ -993,8 +991,8 @@ namespace SIBSplines{
 		
 		return;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	Eigen::MatrixXd surface_least_square_lambda_multiplier_right_part(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras,
+	template<typename Tp, typename valueT>
+	Eigen::MatrixXd surface_least_square_lambda_multiplier_right_part(Bsurface& surface, const Eigen::MatrixXd& paras,
 		const Eigen::MatrixXd & points, const int dimension) {
 		int psize = (surface.nu() + 1)*(surface.nv() + 1);// total number of control points.
 		int target_size = paras.rows();// nbr of target data points
@@ -1011,8 +1009,8 @@ namespace SIBSplines{
 		assert(counter == target_size);
 		return result;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void push_control_point_list_into_surface(Bsurface<Tp, knotT, valueT>& surface, const std::vector<Vector3d>& cps) {
+	template<typename Tp, typename valueT>
+	void push_control_point_list_into_surface(Bsurface& surface, const std::vector<Vector3d>& cps) {
 		int id = 0;
 		std::vector<std::vector<Vector3d>> control;
 		control.resize(surface.nu() + 1);
@@ -1027,9 +1025,9 @@ namespace SIBSplines{
 		surface.control_points = control;
 		return;
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	void Bsurface<Tp, knotT, valueT>::solve_control_points_for_fairing_surface(Bsurface<Tp, knotT, valueT>& surface, const Eigen::MatrixXd& paras,
-		const Eigen::MatrixXd & points, PartialBasis<Tp, knotT, valueT>& basis) {
+	template<typename Tp, typename valueT>
+	void SurfaceOpt<Tp, valueT>::solve_control_points_for_fairing_surface(Bsurface& surface, const Eigen::MatrixXd& paras,
+		const Eigen::MatrixXd & points, PartialBasis<Tp, valueT>& basis) {
 		//using namespace Eigen;
 		typedef Eigen::SparseMatrix<double> SparseMatrixXd;
 		assert(paras.rows() == points.rows());
@@ -1085,5 +1083,14 @@ namespace SIBSplines{
 		std::cout << "get differential time " << time1 << std::endl;
 		std::cout << "get integration time " << time2 << std::endl;
 	}
+	template<typename Tp, typename valueT>
+	SurfaceOpt<Tp, valueT>::SurfaceOpt(Bsurface &surface) {
+		init(surface);
+	}
+	template<typename Tp, typename valueT>
+	void SurfaceOpt<Tp, valueT>::init(Bsurface &surface) {
+		
+	}
+
 }
 
