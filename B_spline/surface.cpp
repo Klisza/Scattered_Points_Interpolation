@@ -4,13 +4,12 @@
 #include<sparse_interp/mesh_processing.h>
 
 namespace SIBSplines{
-	// Numeber of u/v knots to change
-	template <typename Tp, typename knotT, typename valueT>
-	int Bsurface<Tp, knotT, valueT>::nu() {
+	// Number of U knots
+	int Bsurface::nu() {
 		return U.size() - 2 - degree1;
 	}
-	template <typename Tp, typename knotT, typename valueT>
-	int Bsurface<Tp, knotT, valueT>::nv() {
+	// Number of V knots
+	int Bsurface::nv() {
 		return V.size() - 2 - degree2;
 	}
 	
@@ -55,12 +54,10 @@ namespace SIBSplines{
 		return result;
 	}
 	// 
-	template<typename Tp, typename knotT, typename valueT>
-	Vector3d Bsurface<Tp, knotT, valueT>::BSplineSurfacePoint(const Bsurface<Tp, knotT, valueT>& surface, const double upara, const double vpara) {
+	Vector3d Bsurface::BSplineSurfacePoint(const Bsurface& surface, const double upara, const double vpara) {
 		return BSplineSurfacePoint_(surface.degree1, surface.degree2, surface.U, surface.V, upara, vpara, surface.control_points);
 	}
-	template<typename Tp, typename knotT, typename valueT>
-	Vector3d Bsurface<Tp, knotT, valueT>::BSplineSurfacePoint(const std::vector<std::vector<std::vector<double>>> &upolys, const std::vector<std::vector<std::vector<double>>> &vpolys,
+	Vector3d Bsurface::BSplineSurfacePoint(const std::vector<std::vector<std::vector<double>>> &upolys, const std::vector<std::vector<std::vector<double>>> &vpolys,
 									   const std::vector<std::vector<std::vector<double>>> &tpolys, double u, double v, double t, const std::vector<double> &UKV, const std::vector<double> &VKV,
 									   const std::vector<double> &TKV, const std::vector<std::vector<std::vector<Vector3d>>> &CPs, const int udegree, 
 									   const int vdegree, const int tdegree)
@@ -894,8 +891,8 @@ std::vector<double> update_knot_vector_based_on_grid(const int degree1, const in
 	}
 	return Utemp;
 }
-template<typename Tp, typename knotT, typename valueT>
-void Bsurface<Tp, knotT, valueT>::generate_interpolation_knot_vectors( int degree1, int degree2,
+
+void Bsurface::generate_interpolation_knot_vectors( int degree1, int degree2,
 	std::vector<double>& Uknot, std::vector<double>& Vknot,
 	const Eigen::MatrixXd& param_original, 
 	const double per_ours,const double per, const int target_steps, const bool enable_max_fix_nbr, per_too_large &per_flag) {
@@ -973,8 +970,7 @@ void Bsurface<Tp, knotT, valueT>::generate_interpolation_knot_vectors( int degre
 	return;
 }
 
-template<typename Tp, typename knotT, typename valueT>
-void Bsurface<Tp, knotT, valueT>::generate_interpolation_knot_vectors(int degree1, int degree2,
+void Bsurface::generate_interpolation_knot_vectors(int degree1, int degree2,
 	std::vector<double>& Uknot, std::vector<double>& Vknot,
 	const Eigen::MatrixXd& param_original, 
 	double &per_ours, const double per, const int target_steps, const bool enable_max_fix_nbr) {
@@ -995,8 +991,8 @@ void Bsurface<Tp, knotT, valueT>::generate_interpolation_knot_vectors(int degree
 	per_ours = per_ours_tmp;
 	return;	
 }
-template<typename Tp, typename knotT, typename valueT>
-double Bsurface<Tp, knotT, valueT>::max_interpolation_err(const Eigen::MatrixXd&ver, const Eigen::MatrixXd& param, Bsurface& surface) {
+
+double Bsurface::max_interpolation_err(const Eigen::MatrixXd&ver, const Eigen::MatrixXd& param, Bsurface& surface) {
 	double err = 0;
 	for (int i = 0; i < ver.rows(); i++) {
 		Vector3d v = ver.row(i);
@@ -1011,9 +1007,9 @@ double Bsurface<Tp, knotT, valueT>::max_interpolation_err(const Eigen::MatrixXd&
 	return err;
 }
 // calculate interpolation error for approximation/interpolation method
-template<typename Tp, typename knotT, typename valueT>
-Eigen::MatrixXd Bsurface<Tp, knotT, valueT>::interpolation_err_for_apprximation(const Eigen::MatrixXd&ver, 
-	const Eigen::MatrixXd& param, Bsurface<Tp, knotT, valueT>& surface,double &max_err) {
+
+Eigen::MatrixXd Bsurface::interpolation_err_for_apprximation(const Eigen::MatrixXd&ver, 
+	const Eigen::MatrixXd& param, Bsurface& surface,double &max_err) {
 	Eigen::MatrixXd result(ver.rows(), ver.cols());
 	double err = 0;
 	for (int i = 0; i < ver.rows(); i++) {
@@ -1031,8 +1027,8 @@ Eigen::MatrixXd Bsurface<Tp, knotT, valueT>::interpolation_err_for_apprximation(
 	max_err = err;
 	return result;
 }
-template<typename Tp, typename knotT, typename valueT>
-void B_spline_surface_to_mesh(Bsurface<Tp, knotT, valueT> &surface, const int pnbr, Eigen::MatrixXd &ver, Eigen::MatrixXi& faces) {
+
+void B_spline_surface_to_mesh(Bsurface &surface, const int pnbr, Eigen::MatrixXd &ver, Eigen::MatrixXi& faces) {
 	std::vector<std::vector<Vector3d>> pts;
 	ver.resize(pnbr*pnbr, 3);
 	int verline = 0;
@@ -1055,8 +1051,8 @@ void B_spline_surface_to_mesh(Bsurface<Tp, knotT, valueT> &surface, const int pn
 	}
 	std::cout<<"the surface is converted into a mesh\n";
 }
-template<typename Tp, typename knotT, typename valueT>
-void Bsurface<Tp, knotT, valueT>::RefineKnots(int nbr)
+
+void Bsurface::RefineKnots(int nbr)
 {
 	bool uorv = false; // 0 : u, 1 : v
 	int accumulate = 0;
@@ -1115,8 +1111,8 @@ void Bsurface<Tp, knotT, valueT>::RefineKnots(int nbr)
 		print_vector(V);
 	return;
 }
-template<typename Tp, typename knotT, typename valueT>
-void Bsurface<Tp, knotT, valueT>::surface_visulization(Bsurface<Tp, knotT, valueT>& surface, const int nbr, Eigen::MatrixXd & v, Eigen::MatrixXi &f) {
+
+void Bsurface::surface_visulization(Bsurface& surface, const int nbr, Eigen::MatrixXd & v, Eigen::MatrixXi &f) {
 	B_spline_surface_to_mesh(surface, nbr, v, f);
 	return;
 }

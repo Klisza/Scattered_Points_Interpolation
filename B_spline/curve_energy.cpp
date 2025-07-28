@@ -128,7 +128,7 @@ void Bcurve::solve_control_points_for_fairing_curve(Bcurve& curve, const std::ve
 
 		// solve the matrix contains the p and lambda
 		// std::cout << "before solving" << std::endl;
-		Eigen::MatrixXd p_lambda = slove_linear_system(A, b, false, err);
+		Eigen::MatrixXd p_lambda = solve_linear_system(A, b, false, err);
 		// std::cout << "after solving" << std::endl;
 		push_p_lambda_vector_to_control_points(p_lambda, i, cps);
 	}
