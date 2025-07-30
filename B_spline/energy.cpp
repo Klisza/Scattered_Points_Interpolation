@@ -1071,7 +1071,6 @@ void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::Matrix
                                           int shifti, int shiftj, std::vector<Trip> &tripletes)
 {
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
-    // Eigen::MatrixXd result(paras.rows(), psize);
     int degree1 = surface.degree1;
     int degree2 = surface.degree2;
     std::vector<double> U = surface.U;

@@ -181,8 +181,10 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     int varSize = 2 * nbr + 3 * cpSize;
 
     // Solve for the variables using the knot vectors.
-    auto func = TinyAD::scalar_function<2>(TinyAD::range(varSize));
-    // How many handles do I have?
+    auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
+    // Solving for control points
+    // How many variables per control point?
+    // 
     func.add_elements<2>(TinyAD::range(varSize),
                          [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
                          {
@@ -190,7 +192,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                              Eigen::Index dataID = element.handle;
                              SurfaceOpt<T, T> sOpt(surface);
                              PartialBasis<T, T> basis(surface);
-
+                             
                              sOpt.solve_control_points_for_fairing_surface(surface, param, ver,
                                                                            basis);
                          });
