@@ -176,27 +176,33 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     std::cout << "knot vectors generated" << std::endl;
 
     // Calculate the number of variables we solve for.
+    // Control points
     int cpSize =
         (surface.U.size() - 1 - surface.degree1) * (surface.V.size() - 1 - surface.degree2);
+    // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
     int varSize = 2 * nbr + 3 * cpSize;
 
-    // Solve for the variables using the knot vectors.
+    // Solve for the variables (parameters and control points) using the knot vectors.
     auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
-    // Solving for control points
-    // How many variables per control point?
-    // 
-    func.add_elements<2>(TinyAD::range(varSize),
-                         [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
-                         {
-                             using T = TINYAD_SCALAR_TYPE(element);
-                             Eigen::Index dataID = element.handle;
-                             SurfaceOpt<T, T> sOpt(surface);
-                             PartialBasis<T, T> basis(surface);
-                             
-                             sOpt.solve_control_points_for_fairing_surface(surface, param, ver,
-                                                                           basis);
-                         });
-    std::cout << "surface solved" << std::endl;
+    // Fitting energy
+    // (d+1)*(d+1) cps * 3 (x,y,z) + 2 * parameters (u,v).
+    // For degree 3 = 50 variables
+    func.add_elements<50>(TinyAD::range(nbr),
+                          [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
+                          {
+                              using T = TINYAD_SCALAR_TYPE(element);
+                              Eigen::Index dataID = element.handle;
+                              SurfaceOpt<T, T> sOpt(surface);
+                              PartialBasis<T, T> basis(surface);
+                              element.variables();
+
+                              sOpt.solve_control_points_for_fairing_surface(surface, param, ver,
+                                                                            basis);
+
+                              T energy_final;
+                              return energy_final;
+                          });
+    // Fairing energy manual
 
     /* ///////////////////////
         Data Visualization

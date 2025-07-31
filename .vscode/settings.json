@@ -129,5 +129,6 @@
         "openglsupport": "cpp",
         "specialfunctions": "cpp",
         "splines": "cpp"
-    }
+    },
+    "editor.formatOnSave": true
 }
