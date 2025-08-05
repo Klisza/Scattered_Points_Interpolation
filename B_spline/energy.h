@@ -6,10 +6,10 @@ namespace SIBSplines
 
 // construct an integration of multiplication of two B-spline basis (intergration of
 // partial(Ni1)*partial(Ni2)) the integration domain is [u1, u2]
-template<typename Tp, typename valueT>
+template <typename Tp, typename valueT>
 double construct_an_integration(const int degree, const std::vector<double> &U, const int partial1,
                                 const int partial2, const int i1, const int i2, const double u1,
-                                const double u2, PolynomialBasis<Tp, valueT> &basis, const bool uv);
+                                const double u2, PolynomialBasis &basis, const bool uv);
 double construct_an_integration(const int degree, const std::vector<double> &U, const int partial1,
                                 const int partial2, const int i1, const int i2, const double u1,
                                 const double u2);

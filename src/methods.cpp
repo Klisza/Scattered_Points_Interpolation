@@ -19,8 +19,12 @@
 #include <TinyAD/Utils/NewtonDecrement.hh>
 #include <TinyAD/Utils/NewtonDirection.hh>
 
+#define PARAMETER true
+#define CP false
+
 namespace SIBSplines
 {
+
 void write_control_pts(std::vector<std::vector<Vector3d>> &cps, std::string file)
 {
     std::ofstream fout;
@@ -222,10 +226,6 @@ splineBasis<Tp, knotT, valueT>::computeBasisFunctionValues(const valueT &value, 
     std::vector<std::vector<knotT>> basisFunctions(p + 1);
     for (int i = 0; i < p + 1; i++)
     {
-        // if (inDebug)
-        // {
-        //     std::cout << "requiring i " << uId - p + i << ", uid, " << uId << "\n";
-        // }
         basisFunctions[i] = Nip_func(uId - p + i, p, uId, U, p);
         result[i] = PO.polynomial_value(basisFunctions[i], value);
     }
@@ -336,28 +336,75 @@ void write_svg_knot_vectors(const std::string &file, const std::vector<double> &
     fout.close();
 }
 
+// Rescales parameters from [a,b] -> [a+epsilon, b-epsilon]
+void rescale_param(Eigen::MatrixXd &param)
+{
+    double epsilon = 1e-6;
+    for (int i = 0; i < param.rows(); i++)
+    {
+        for (int j = 0; j < 2; j++)
+        {
+            param(i, j) = epsilon + (1 - 2 * epsilon) * param(i, j);
+        }
+    }
+}
+
+// Perform a binary search to find the lower bound of the knot vector that fits the parameter.
+int return_closest_knot_index_to_param(std::vector<double> UV, double param)
+{
+    int index;
+    auto it = std::lower_bound(UV.begin(), UV.end(), param);
+    if (it == UV.begin())
+    {
+        std::cerr << "Error: No interval found for " << param << std::endl;
+    }
+    index = std::distance(std::begin(UV), it);
+    return index - 1;
+}
+
+// Gives you the varaible depending on U or V direction, variable type (control point or parameter)
+int variableMap(bool Udirection, bool ParOrCp, int pos, int id)
+{
+    int result;
+    if (ParOrCp)
+    {
+        result = parameterLocation(Udirection, pos, id);
+    }
+    else
+    {
+        result = controlPointLocation(Udirection, pos, id);
+    }
+    return result;
+}
+
+int parameterLocation(bool Udirection, int pos, int id)
+{
+    if (Udirection)
+    {
+    }
+    else
+    {
+    }
+}
+int controlPointLocation(bool Udirection, int pos, int id) {}
+
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
 {
     double precision = 0;
     Eigen::MatrixXd ver;
     Eigen::MatrixXi F;
-    Eigen::MatrixXd param, paramout;
+    Eigen::MatrixXd param;
     std::cout << "reading mesh model: " << meshfile << std::endl;
 
     // mesh parametrization, and print out the parametrization result as a obj mesh.
     mesh_parameterization(meshfile, ver, param, F);
-    // BW: After parametrization, we should rescale the parametrization region to [a,b]x[c,d], where
-    // [a,b] \in (0,1) and [c,d]\in (0,1), to avoid parameters showing on the boudaries.
-    paramout.resize(param.rows(), 3);
-    Eigen::VectorXd param_zero = Eigen::VectorXd::Zero(param.rows());
-    paramout << param, param_zero;
-    write_triangle_mesh(meshfile + "_param", paramout, F);
+    rescale_param(param);
 
     // construct the surface object
     Bsurface surface;
 
     // set up the initial parameters.
-    int nbr = param.rows();                 // the number of data points
+    int param_nbr = param.rows();           // the number of data points
     surface.degree1 = 3;                    // degree of u direction
     surface.degree2 = 3;                    // degree of v direction
     surface.U = {{0, 0, 0, 0, 1, 1, 1, 1}}; // the initial U knot vector
@@ -370,33 +417,64 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                                                 enable_max_fix_nbr);
     std::cout << "knot vectors generated" << std::endl;
 
+    // Solve the control points as initialization.
     PartialBasis basis(surface);
-    surface.solve_control_points_for_fairing_surface(
-        surface, param, ver, basis); // solve the control points as initializations.
-    // BW: here, write a list "std::array<int, 2> paraInInterval[int dataPointID]" to record in
-    // which interval each point should stay.
+    surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
+    std::cout << "Control points initialized" << std::endl;
 
-    // Calculate the number of variables we solve for.
-    //  Control points
+    // Init parameter intervals for reparameterization
+    std::vector<std::array<int, 2>> paraInInterval(param_nbr, {0, 0});
+    // Perform binary search and return the element
+    for (int i = 0; i < paraInInterval.size() - 1; i++)
+    {
+        paraInInterval[i][0] = return_closest_knot_index_to_param(surface.U, param(i, 0));
+        paraInInterval[i][1] = return_closest_knot_index_to_param(surface.V, param(i, 1));
+    }
+
+    //  Calculate the number of variables we solve for.
+    //  Number of control points
     int cpSize =
         (surface.U.size() - 1 - surface.degree1) * (surface.V.size() - 1 - surface.degree2);
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
-    int varSize = 2 * nbr + 3 * cpSize;
+    int varSize = 2 * param_nbr + 3 * cpSize;
+    // Init globVars vector
+    int cpCols = surface.control_points.size();
+    int cpRows = surface.control_points[0].size();
+    // Add control points to globVars
+    // Put the grid structure into a vector (i,j) directions same as (u,v) -> variableMap
+    for (int k = 0; k < 3; k++)
+    {
+        for (int i = 0; i < cpRows; i++)
+        {
+            for (int j = 0; j < cpCols; j++)
+            {
+                surface.globVars[i * j + k * cpSize] = surface.control_points[i][j](k);
+            }
+        }
+    }
+    // Add parameters to globVars
+    for (int k = 0; k < 2; k++)
+    {
+        for (int i = 0; i < param.size(); i++)
+        {
+            surface.globVars[i + k * param.size() + 3 * cpSize] = param(i, k);
+        }
+    }
 
     // Solve for the variables (parameters and control points) using the knot vectors.
     auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
     // Fitting energy
-    // (d+1)*(d+1) cps * 3 (x,y,z) + 2 * parameters (u,v).
+    // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
     // For degree 3 = 50 variables
     func.add_elements<50>(
-        TinyAD::range(nbr),
+        TinyAD::range(param_nbr),
         [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
         {
             using T = TINYAD_SCALAR_TYPE(element);
             Eigen::Index dataID = element.handle;
 
-            T parameterU = element.variables(DEFINE_YOUR_VARIABLE_MAPPING_FUNCTION)(0, 0);
-            T parameterV = element.variables(DEFINE_YOUR_VARIABLE_MAPPING_FUNCTION)(0, 0);
+            T parameterU = element.variables(variableMap())(0, 0);
+            T parameterV = element.variables(variableMap())(0, 0);
             // get the uv intervals [U[uItv], U[uItv+1])
             int uItv = paraInInterval[dataID][0];
             int vItv = paraInInterval[dataID][1];
@@ -500,11 +578,13 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         precision = surface.max_interpolation_err(ver, param, surface);
         std::cout << "maximal interpolation error "
                   << surface.max_interpolation_err(ver, param, surface) << std::endl;
-        write_points(meshfile + "pts" + std::to_string(nbr) + ".obj", ver);
-        write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", SPs, SFs);
+        write_points(meshfile + "pts" + std::to_string(param_nbr) + ".obj", ver);
+        write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", SPs,
+                            SFs);
         Eigen::MatrixXd verticies;
         Eigen::MatrixXi faces;
-        igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(nbr) + ".obj", verticies, faces);
+        igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", verticies,
+                     faces);
         polyscope::SurfaceMesh *psSurfaceMesh =
             polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
     }
