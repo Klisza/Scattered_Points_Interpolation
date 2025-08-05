@@ -6,7 +6,6 @@
 #include <iostream>
 #include <vector>
 
-
 namespace SIBSplines
 {
 typedef Eigen::SparseMatrix<double> SparseMatrixXd;
@@ -23,7 +22,7 @@ struct per_too_large
     bool flag;
 };
 // Should be templated for evaluation
-template <typename Tp, typename valueT> class ply_operations
+template <typename Tp, typename knotT, typename valueT> class ply_operations
 {
   public:
     ply_operations() {};
@@ -37,7 +36,7 @@ template <typename Tp, typename valueT> class ply_operations
     Tp polynomial_integration(const std::vector<Tp> &poly, const Tp lower, const Tp upper);
 };
 
-template <typename Tp, typename valueT> class PartialBasis;
+class PartialBasis;
 class Bsurface
 {
   public:
@@ -45,6 +44,7 @@ class Bsurface
     ~Bsurface() {};
     int degree1;
     int degree2;
+    std::vector<double> globVars;
     std::vector<double> U;
     std::vector<double> V;
     double upara;
@@ -68,6 +68,9 @@ class Bsurface
                                     const Eigen::MatrixXd &energy_uu,
                                     const Eigen::MatrixXd &energy_vv, bool &uorv, int &which,
                                     double &em);
+    void solve_control_points_for_fairing_surface(Bsurface &surface, const Eigen::MatrixXd &paras,
+                                                  const Eigen::MatrixXd &points,
+                                                  PartialBasis &basis);
 
     // ..
     Eigen::MatrixXd interpolation_err_for_apprximation(const Eigen::MatrixXd &ver,
@@ -125,16 +128,14 @@ template <typename Tp, typename valueT> class SurfaceOpt
     std::vector<std::vector<Vector3d>> control_points;
     void init(Bsurface &surface);
     void clear();
-    void solve_control_points_for_fairing_surface(Bsurface &surface, const Eigen::MatrixXd &paras,
-                                                  const Eigen::MatrixXd &points,
-                                                  PartialBasis<Tp, valueT> &basis);
+
     // calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
-    Eigen::MatrixXd surface_energy_calculation(Bsurface &surface, PartialBasis<Tp, valueT> &basis,
+    Eigen::MatrixXd surface_energy_calculation(Bsurface &surface, PartialBasis &basis,
                                                const int discrete, Eigen::MatrixXd &energy_uu,
                                                Eigen::MatrixXd &energy_vv,
                                                Eigen::MatrixXd &energy_uv);
 };
-//
+
 class Bcurve
 {
   public:
@@ -172,7 +173,7 @@ class Bcurve
     Vector3d BsplinePoint(const int degree, const std::vector<double> &U, const double para,
                           const Eigen::MatrixXd &pts);
 };
-template <typename Tp, typename valueT> class PolynomialBasis
+class PolynomialBasis
 {
   public:
     PolynomialBasis(
@@ -189,8 +190,8 @@ template <typename Tp, typename valueT> class PolynomialBasis
     std::vector<double> Vknot;
     int degree1;
     int degree2;
-    std::vector<std::vector<std::vector<Tp>>> calculate_single(const int degree,
-                                                               const std::vector<Tp> &knotVector);
+    std::vector<std::vector<std::vector<double>>>
+    calculate_single(const int degree, const std::vector<double> &knotVector);
 
   private:
     int nu;
@@ -200,7 +201,6 @@ template <typename Tp, typename valueT> class PolynomialBasis
     calculate(const bool uorv); // 0 checking u; 1 checking v
 };
 
-template <typename Tp, typename valueT>
 // get the first or second partial differential polynomial of U or V knot vectors
 class PartialBasis
 {
@@ -208,7 +208,7 @@ class PartialBasis
     PartialBasis(Bsurface &surface);
     PartialBasis();
     void init(Bsurface &surface);
-    void init(PolynomialBasis<Tp, valueT> &pb);
+    void init(PolynomialBasis &pb);
     // return a certain basis (in 0, 1 or 2 order partial differential) of N_{id}(value)
     // UVknot==1 -> check v
     std::vector<double> poly(const int id, const double value, const bool UVknot, int partial);

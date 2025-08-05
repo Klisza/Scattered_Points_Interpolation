@@ -13,9 +13,9 @@ igl::Timer timer;
 double time0 = 0, time1 = 0, time2 = 0, time3 = 0;
 
 // These functions handle the polynomials.
-template <typename Tp, typename valueT>
-std::vector<Tp> ply_operations<Tp, valueT>::polynomial_add(const std::vector<Tp> &poly1,
-                                                           const std::vector<Tp> &poly2)
+template <typename Tp, typename knotT, typename valueT>
+std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_add(const std::vector<Tp> &poly1,
+                                                                  const std::vector<Tp> &poly2)
 {
     int size = std::max(poly1.size(), poly2.size());
     std::vector<Tp> result(size);
@@ -36,12 +36,12 @@ std::vector<Tp> ply_operations<Tp, valueT>::polynomial_add(const std::vector<Tp>
             result[i] = poly2[i];
         }
     }
-    return result; // ply_operations<Tp, valueT>::polynomial_simplify(result);
+    return result; // ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
 }
 // Cauchy product/Polynomial product
-template <typename Tp, typename valueT>
-std::vector<Tp> ply_operations<Tp, valueT>::polynomial_times(const std::vector<Tp> &poly1,
-                                                             const std::vector<Tp> &poly2)
+template <typename Tp, typename knotT, typename valueT>
+std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<Tp> &poly1,
+                                                                    const std::vector<Tp> &poly2)
 {
     int size = poly1.size() + poly2.size() - 1;
     std::vector<Tp> result(size);
@@ -57,12 +57,12 @@ std::vector<Tp> ply_operations<Tp, valueT>::polynomial_times(const std::vector<T
             result[i + j] += poly1[i] * poly2[j];
         }
     }
-    return result; // ply_operations<Tp, valueT>::polynomial_simplify(result);
+    return result; // ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
 }
 // Scalar multiplication
-template <typename Tp, typename valueT>
-std::vector<Tp> ply_operations<Tp, valueT>::polynomial_times(const std::vector<Tp> &poly1,
-                                                             const Tp &nbr)
+template <typename Tp, typename knotT, typename valueT>
+std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<Tp> &poly1,
+                                                                    const Tp &nbr)
 {
     std::vector<Tp> result;
     result = poly1;
@@ -75,8 +75,8 @@ std::vector<Tp> ply_operations<Tp, valueT>::polynomial_times(const std::vector<T
 }
 // This might need to be updated to work on TinyAD since it should use polynomial_times because of
 // the AD type.
-template <typename Tp, typename valueT>
-Tp ply_operations<Tp, valueT>::power(const valueT &value, const int order)
+template <typename Tp, typename knotT, typename valueT>
+Tp ply_operations<Tp, knotT, valueT>::power(const valueT &value, const int order)
 {
     if (order == 0)
     {
@@ -89,8 +89,9 @@ Tp ply_operations<Tp, valueT>::power(const valueT &value, const int order)
     }
     return result;
 }
-template <typename Tp, typename valueT>
-Tp ply_operations<Tp, valueT>::polynomial_value(const std::vector<Tp> &poly, const valueT para)
+template <typename Tp, typename knotT, typename valueT>
+Tp ply_operations<Tp, knotT, valueT>::polynomial_value(const std::vector<Tp> &poly,
+                                                       const valueT para)
 {
     double result = 0;
     for (int i = 0; i < poly.size(); i++)
@@ -99,8 +100,9 @@ Tp ply_operations<Tp, valueT>::polynomial_value(const std::vector<Tp> &poly, con
     }
     return result;
 }
-template <typename Tp, typename valueT>
-std::vector<Tp> ply_operations<Tp, valueT>::polynomial_integration(const std::vector<Tp> &poly)
+template <typename Tp, typename knotT, typename valueT>
+std::vector<Tp>
+ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp> &poly)
 {
     std::vector<Tp> result(poly.size() + 1);
     result[0] = 0;
@@ -110,9 +112,9 @@ std::vector<Tp> ply_operations<Tp, valueT>::polynomial_integration(const std::ve
     }
     return result;
 }
-template <typename Tp, typename valueT>
-Tp ply_operations<Tp, valueT>::polynomial_integration(const std::vector<Tp> &poly, const Tp lower,
-                                                      const Tp upper)
+template <typename Tp, typename knotT, typename valueT>
+Tp ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp> &poly,
+                                                             const Tp lower, const Tp upper)
 {
     Tp up = ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), upper);
     Tp lw = ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), lower);
@@ -148,12 +150,26 @@ std::vector<double> Ni0_func(const int i, const double u, const std::vector<doub
     return result;
 }
 
-// TODO!! ///////////// Rewrite it for templated functions.
-template <typename Tp, typename valueT>
-std::vector<Tp> Nip_func(const int i, const int p, const double u, const std::vector<double> &U)
+std::vector<double> handle_division_func(const std::vector<double> &a, const double b)
 {
-    ply_operations<Tp, valueT> PO;
-    std::vector<Tp> result;
+    ply_operations<double, double, double> PO;
+    std::vector<double> result;
+    if (b == 0)
+    {
+        result.resize(1);
+        result[0] = 0;
+        // if the denominator is 0, then this term is 0
+        return result;
+    }
+    else
+        return PO.polynomial_times(a, 1 / b);
+}
+
+// TODO!! ///////////// Rewrite it for templated functions.
+std::vector<double> Nip_func(const int i, const int p, const double u, const std::vector<double> &U)
+{
+    ply_operations<double, double, double> PO;
+    std::vector<double> result;
     if (p == 0)
     {
         return Ni0_func(i, u, U);
@@ -174,13 +190,13 @@ std::vector<Tp> Nip_func(const int i, const int p, const double u, const std::ve
     }
     std::vector<double> v;
     v = {{-U[i], 1}}; // u - U[i]
-    std::vector<double> result1 = ply_operations<Tp, valueT>::polynomial_times(
-        handle_division_func(v, U[i + p] - U[i]), Nip_func(i, p - 1, u, U));
+    std::vector<double> result1 =
+        PO.polynomial_times(handle_division_func(v, U[i + p] - U[i]), Nip_func(i, p - 1, u, U));
 
     v = {{U[i + p + 1], -1}}; // U[i+p+1] - u
-    std::vector<double> result2 = ply_operations<Tp, valueT>::polynomial_times(
+    std::vector<double> result2 = PO.polynomial_times(
         handle_division_func(v, U[i + p + 1] - U[i + 1]), Nip_func(i + 1, p - 1, u, U));
-    return ply_operations<Tp, valueT>::polynomial_add(result1, result2);
+    return PO.polynomial_add(result1, result2);
 }
 
 // Same thing here TinyAD should autodifferenciate this whole thing. ////
@@ -203,7 +219,7 @@ const std::vector<double> polynomial_differential(const std::vector<double> &fun
     }
     return result;
 }
-template <typename Tp, typename valueT> void PolynomialBasis<Tp, valueT>::init(Bsurface &surface)
+void PolynomialBasis::init(Bsurface &surface)
 {
     Uknot = surface.U;
     Vknot = surface.V;
@@ -216,7 +232,7 @@ template <typename Tp, typename valueT> void PolynomialBasis<Tp, valueT>::init(B
     inited = true;
     return;
 }
-template <typename Tp, typename valueT> void PolynomialBasis<Tp, valueT>::clear()
+void PolynomialBasis::clear()
 {
     Uknot.clear();
     Vknot.clear();
@@ -224,16 +240,11 @@ template <typename Tp, typename valueT> void PolynomialBasis<Tp, valueT>::clear(
     Vbasis.clear();
     inited = false;
 }
-template <typename Tp, typename valueT>
-PolynomialBasis<Tp, valueT>::PolynomialBasis(Bsurface &surface)
-{
-    init(surface);
-}
-template <typename Tp, typename valueT> PolynomialBasis<Tp, valueT>::PolynomialBasis() {}
+
+PolynomialBasis::PolynomialBasis(Bsurface &surface) { init(surface); }
+PolynomialBasis::PolynomialBasis() {}
 // Poly return the coefficents
-template <typename Tp, typename valueT>
-std::vector<double> PolynomialBasis<Tp, valueT>::poly(const int id, const double value,
-                                                      const bool UVknot)
+std::vector<double> PolynomialBasis::poly(const int id, const double value, const bool UVknot)
 {
     if (!inited)
     {
@@ -288,11 +299,11 @@ std::vector<double> PolynomialBasis<Tp, valueT>::poly(const int id, const double
     return result;
 }
 //
-template <typename Tp, typename valueT>
-std::vector<std::vector<std::vector<Tp>>>
-PolynomialBasis<Tp, valueT>::calculate_single(const int degree, const std::vector<Tp> &knotVector)
+
+std::vector<std::vector<std::vector<double>>>
+PolynomialBasis::calculate_single(const int degree, const std::vector<double> &knotVector)
 {
-    std::vector<std::vector<std::vector<Tp>>> pl;
+    std::vector<std::vector<std::vector<double>>> pl;
     int n = knotVector.size() - 2 - degree;
     pl.resize(n + 1);
     for (int i = degree; i < n + 1; i++)
@@ -305,13 +316,13 @@ PolynomialBasis<Tp, valueT>::calculate_single(const int degree, const std::vecto
     }
     return pl;
 }
-// Should work
-template <typename Tp, typename valueT>
-std::vector<Tp> basisValues(const int whichItv, const int degree,
-                            const std::vector<std::vector<std::vector<double>>> &basis,
-                            const double param)
+
+std::vector<double> basisValues(const int whichItv, const int degree,
+                                const std::vector<std::vector<std::vector<double>>> &basis,
+                                const double param)
 {
-    std::vector<Tp> result(degree + 1);
+    ply_operations<double, double, double> PO;
+    std::vector<double> result(degree + 1);
     for (int i = 0; i < degree + 1; i++)
     {
         if (whichItv >= basis.size())
@@ -323,13 +334,12 @@ std::vector<Tp> basisValues(const int whichItv, const int degree,
             std::cout << "The basis whihcitv is empty, which itv " << whichItv
                       << ", the size of basis functions " << basis.size() << "\n";
         }
-        result[i] = ply_operations<Tp, valueT>::polynomial_value(basis[whichItv][i], param);
+        result[i] = PO.polynomial_value(basis[whichItv][i], param);
     }
     return result;
 }
-template <typename Tp, typename valueT>
-std::vector<std::vector<std::vector<double>>>
-PolynomialBasis<Tp, valueT>::calculate(const bool uorv)
+
+std::vector<std::vector<std::vector<double>>> PolynomialBasis::calculate(const bool uorv)
 {
     std::vector<double> kv;
     int degree;
@@ -360,9 +370,9 @@ PolynomialBasis<Tp, valueT>::calculate(const bool uorv)
 
     return pl;
 }
-template <typename Tp, typename valueT>
+
 std::vector<std::vector<std::vector<double>>>
-PartialBasis<Tp, valueT>::do_partial(const std::vector<std::vector<std::vector<double>>> &basis)
+PartialBasis::do_partial(const std::vector<std::vector<std::vector<double>>> &basis)
 {
     std::vector<std::vector<std::vector<double>>> result(basis.size());
     for (int i = 0; i < basis.size(); i++)
@@ -376,12 +386,9 @@ PartialBasis<Tp, valueT>::do_partial(const std::vector<std::vector<std::vector<d
     return result;
 }
 
-template <typename Tp, typename valueT> PartialBasis<Tp, valueT>::PartialBasis(Bsurface &surface)
-{
-    init(surface);
-}
-template <typename Tp, typename valueT> PartialBasis<Tp, valueT>::PartialBasis() {}
-template <typename Tp, typename valueT> void PartialBasis<Tp, valueT>::init(Bsurface &surface)
+PartialBasis::PartialBasis(Bsurface &surface) { init(surface); }
+PartialBasis::PartialBasis() {}
+void PartialBasis::init(Bsurface &surface)
 {
     PolynomialBasis pb(surface);
     Ubasis = pb.Ubasis;
@@ -395,8 +402,8 @@ template <typename Tp, typename valueT> void PartialBasis<Tp, valueT>::init(Bsur
     degree1 = surface.degree1;
     degree2 = surface.degree2;
 }
-template <typename Tp, typename valueT>
-void PartialBasis<Tp, valueT>::init(PolynomialBasis<Tp, valueT> &pb)
+
+void PartialBasis::init(PolynomialBasis &pb)
 {
     Ubasis = pb.Ubasis;
     Vbasis = pb.Vbasis;
@@ -409,7 +416,7 @@ void PartialBasis<Tp, valueT>::init(PolynomialBasis<Tp, valueT> &pb)
     degree1 = pb.degree1;
     degree2 = pb.degree2;
 }
-template <typename Tp, typename valueT> void PartialBasis<Tp, valueT>::clear()
+void PartialBasis::clear()
 {
     Uknot.clear();
     Vknot.clear();
@@ -421,9 +428,9 @@ template <typename Tp, typename valueT> void PartialBasis<Tp, valueT>::clear()
     Vbasis_2.clear();
 }
 // What exact type should this function be
-template <typename Tp, typename valueT>
-std::vector<double> PartialBasis<Tp, valueT>::poly(const int id, const double value,
-                                                   const bool UVknot, int partial)
+
+std::vector<double> PartialBasis::poly(const int id, const double value, const bool UVknot,
+                                       int partial)
 {
     std::vector<double> kv;
     int degree;
@@ -491,11 +498,12 @@ std::vector<double> PartialBasis<Tp, valueT>::poly(const int id, const double va
 
 // construct an integration of multiplication of two B-spline basis (intergration of
 // partial(Ni1)*partial(Ni2)) the integration domain is [u1, u2]
-template <typename Tp, typename valueT>
+
 double construct_an_integration(const int degree, const std::vector<double> &U, const int partial1,
                                 const int partial2, const int i1, const int i2, const double u1,
-                                const double u2, PolynomialBasis<Tp, valueT> &basis, const bool uv)
+                                const double u2, PolynomialBasis &basis, const bool uv)
 {
+    ply_operations<double, double, double> PO;
     timer.start();
     std::vector<double> func1 = basis.poly(i1, u1, uv);
     // Nip_func(i1, degree, u1, U);
@@ -526,7 +534,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     // print_vector(func1);
     // print_vector(func2);
     timer.start();
-    std::vector<double> func = ply_operations<Tp, valueT>::polynomial_times(func1, func2);
+    std::vector<double> func = PO.polynomial_times(func1, func2);
     // std::cout << "times" << std::endl;
     // print_vector(func);
     double upper = u2;
@@ -534,17 +542,18 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     {
         upper = U.back() - SCALAR_ZERO;
     }
-    double result = ply_operations<Tp, valueT>::polynomial_integration(func, u1, upper);
+    double result = PO.polynomial_integration(func, u1, upper);
     timer.stop();
     time2 += timer.getElapsedTimeInMilliSec();
 
     return result;
 }
-template <typename Tp, typename valueT>
+
 double construct_an_integration(const int degree, const std::vector<double> &U, const int partial1,
                                 const int partial2, const int i1, const int i2, const double u1,
-                                const double u2, PartialBasis<Tp, valueT> &basis, const bool uv)
+                                const double u2, PartialBasis &basis, const bool uv)
 {
+    ply_operations<double, double, double> PO;
     timer.start();
     // std::vector<double> func1 = basis.poly(i1, u1, uv);
     // std::vector<double> func2 = basis.poly(i2, u1, uv);
@@ -558,20 +567,20 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     time1 += timer.getElapsedTimeInMilliSec();
 
     timer.start();
-    std::vector<double> func = ply_operations<Tp, valueT>::polynomial_times(func1, func2);
+    std::vector<double> func = PO.polynomial_times(func1, func2);
 
     double upper = u2;
     if (u2 == U.back())
     {
         upper = U.back() - SCALAR_ZERO;
     }
-    double result = ply_operations<Tp, valueT>::polynomial_integration(func, u1, upper);
+    double result = PO.polynomial_integration(func, u1, upper);
     timer.stop();
     time2 += timer.getElapsedTimeInMilliSec();
 
     return result;
 }
-template <typename Tp, typename valueT>
+
 // construct an integration of multiplication of two B-spline basis (intergration of
 // partial(Ni1)*partial(Ni2)) the integration domain is [u1, u2]
 double construct_an_integration(const int degree, const std::vector<double> &U, const int partial1,
@@ -579,8 +588,9 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
                                 const double u2)
 {
     timer.start();
-    std::vector<Tp> func1 = Nip_func(i1, degree, u1, U);
-    std::vector<Tp> func2 = Nip_func(i2, degree, u1, U);
+    ply_operations<double, double, double> PO;
+    std::vector<double> func1 = Nip_func(i1, degree, u1, U);
+    std::vector<double> func2 = Nip_func(i2, degree, u1, U);
     timer.stop();
     time0 += timer.getElapsedTimeInMilliSec();
     // std::cout << "degree, "<<degree << std::endl;
@@ -596,7 +606,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     // print_vector(func1);
     // print_vector(func2);
     timer.start();
-    std::vector<double> func = ply_operations<Tp, valueT>::polynomial_times(func1, func2);
+    std::vector<double> func = PO.polynomial_times(func1, func2);
     // std::cout << "times" << std::endl;
     // print_vector(func);
     double upper = u2;
@@ -604,7 +614,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     {
         upper = U.back() - SCALAR_ZERO;
     }
-    double result = ply_operations<Tp, valueT>::polynomial_integration(func, u1, upper);
+    double result = PO.polynomial_integration(func, u1, upper);
     timer.stop();
     time2 += timer.getElapsedTimeInMilliSec();
 
@@ -612,9 +622,8 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
 }
 
 // do partial difference to Pi, the cofficient of jth element Pj.
-template <typename Tp, typename valueT>
-double surface_energy_least_square(Bsurface &surface, const int i, const int j,
-                                   PartialBasis<Tp, valueT> &basis)
+
+double surface_energy_least_square(Bsurface &surface, const int i, const int j, PartialBasis &basis)
 {
     // figure out which Pij corresponding to the ith control point
     int partial_i = i / (surface.nv() + 1);
@@ -675,10 +684,10 @@ double surface_energy_least_square(Bsurface &surface, const int i, const int j,
 }
 
 // do partial difference to Pi, the cofficient of jth element Pj.
-template <typename Tp, typename valueT>
+
 double surface_energy_least_square_tripletes(Bsurface &surface, const int partial_i,
                                              const int partial_j, const int coff_i,
-                                             const int coff_j, PartialBasis<Tp, valueT> &basis)
+                                             const int coff_j, PartialBasis &basis)
 {
     // figure out which Pij corresponding to the ith control point
 
@@ -732,25 +741,23 @@ double surface_energy_least_square_tripletes(Bsurface &surface, const int partia
     return result;
 }
 // in interval [U[i], U[i+1])x[V[j], V[j+1])
-template <typename Tp, typename valueT>
+
 double discrete_surface_partial_value_squared(const int partial1, const int partial2, const int i,
-                                              const int j, Bsurface &surface,
-                                              PartialBasis<Tp, valueT> &basis, const double u,
-                                              const double v)
+                                              const int j, Bsurface &surface, PartialBasis &basis,
+                                              const double u, const double v)
 {
+    ply_operations<double, double, double> PO;
     int p = surface.degree1;
     int q = surface.degree2;
     Eigen::VectorXd Nl(p + 1);
     Eigen::VectorXd Nr(q + 1);
     for (int k = 0; k < p + 1; k++)
     {
-        Nl[k] =
-            ply_operations<Tp, valueT>::polynomial_value(basis.poly(i - p + k, u, 0, partial1), u);
+        Nl[k] = PO.polynomial_value(basis.poly(i - p + k, u, 0, partial1), u);
     }
     for (int k = 0; k < q + 1; k++)
     {
-        Nr[k] =
-            ply_operations<Tp, valueT>::polynomial_value(basis.poly(j - q + k, v, 1, partial2), v);
+        Nr[k] = PO.polynomial_value(basis.poly(j - q + k, v, 1, partial2), v);
     }
     Eigen::MatrixXd px(p + 1, q + 1), py(p + 1, q + 1), pz(p + 1, q + 1);
     for (int k1 = 0; k1 < p + 1; k1++)
@@ -771,8 +778,8 @@ double discrete_surface_partial_value_squared(const int partial1, const int part
 // calculate thin-plate-energy in region [Ui, U(i+1)]x[Vj, V(j+1)]
 template <typename Tp, typename valueT>
 Eigen::MatrixXd SurfaceOpt<Tp, valueT>::surface_energy_calculation(
-    Bsurface &surface, PartialBasis<Tp, valueT> &basis, const int discrete,
-    Eigen::MatrixXd &energy_uu, Eigen::MatrixXd &energy_vv, Eigen::MatrixXd &energy_uv)
+    Bsurface &surface, PartialBasis &basis, const int discrete, Eigen::MatrixXd &energy_uu,
+    Eigen::MatrixXd &energy_vv, Eigen::MatrixXd &energy_uv)
 {
     int p = surface.degree1;
     int q = surface.degree2;
@@ -895,9 +902,8 @@ void Bsurface::detect_max_energy_interval(Bsurface &surface, const Eigen::Matrix
 }
 
 // which_part = 0: Suu; which_part = 1, Suv; which_part = 2, Svv.
-template <typename Tp, typename valueT>
-Eigen::MatrixXd energy_part_of_surface_least_square(Bsurface &surface,
-                                                    PartialBasis<Tp, valueT> &basis)
+
+Eigen::MatrixXd energy_part_of_surface_least_square(Bsurface &surface, PartialBasis &basis)
 {
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
     Eigen::MatrixXd result(psize, psize);
@@ -913,8 +919,8 @@ Eigen::MatrixXd energy_part_of_surface_least_square(Bsurface &surface,
     return result;
 }
 // SIDE STOP
-template <typename Tp, typename valueT>
-void energy_part_of_surface_least_square(Bsurface &surface, PartialBasis<Tp, valueT> &basis,
+
+void energy_part_of_surface_least_square(Bsurface &surface, PartialBasis &basis,
                                          std::vector<Trip> &tripletes)
 {
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
@@ -953,7 +959,7 @@ void energy_part_of_surface_least_square(Bsurface &surface, PartialBasis<Tp, val
         }
     }
 }
-template <typename Tp, typename valueT>
+
 double surface_error_least_square(Bsurface &surface, const int i, const int j,
                                   const Eigen::MatrixXd &paras)
 {
@@ -990,7 +996,7 @@ double surface_error_least_square(Bsurface &surface, const int i, const int j,
     }
     return result;
 }
-template <typename Tp, typename valueT>
+
 Eigen::MatrixXd error_part_of_surface_least_square(Bsurface &surface, const Eigen::MatrixXd &paras)
 {
     // figure out which Pij corr) {
@@ -1007,10 +1013,11 @@ Eigen::MatrixXd error_part_of_surface_least_square(Bsurface &surface, const Eige
     std::cout << "error matrix finish calculation" << std::endl;
     return result;
 }
-template <typename Tp, typename valueT>
-Eigen::VectorXd
-right_part_of_least_square_approximation(Bsurface &surface, const Eigen::MatrixXd &paras,
-                                         const Eigen::MatrixXd &ver, const int dimension)
+
+Eigen::VectorXd right_part_of_least_square_approximation(Bsurface &surface,
+                                                         const Eigen::MatrixXd &paras,
+                                                         const Eigen::MatrixXd &ver,
+                                                         const int dimension)
 {
 
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
@@ -1038,7 +1045,7 @@ right_part_of_least_square_approximation(Bsurface &surface, const Eigen::MatrixX
     }
     return result;
 }
-template <typename Tp, typename valueT>
+
 Eigen::MatrixXd eqality_part_of_surface_least_square(Bsurface &surface,
                                                      const Eigen::MatrixXd &paras)
 {
@@ -1066,7 +1073,7 @@ Eigen::MatrixXd eqality_part_of_surface_least_square(Bsurface &surface,
     return result;
 }
 // this function generate ld and ru.
-template <typename Tp, typename valueT>
+
 void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::MatrixXd &paras,
                                           int shifti, int shiftj, std::vector<Trip> &tripletes)
 {
@@ -1095,17 +1102,16 @@ void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::Matrix
     return;
 }
 
-template <typename Tp, typename valueT>
 Eigen::MatrixXd lambda_part_of_surface_least_square(Bsurface &surface, const Eigen::MatrixXd &paras)
 {
     Eigen::MatrixXd A = eqality_part_of_surface_least_square(surface, paras);
     Eigen::MatrixXd result = -A.transpose();
     return result;
 }
-template <typename Tp, typename valueT>
+
 Eigen::MatrixXd surface_least_square_lambda_multiplier_left_part(Bsurface &surface,
                                                                  const Eigen::MatrixXd &paras,
-                                                                 PartialBasis<Tp, valueT> &basis)
+                                                                 PartialBasis &basis)
 {
     std::cout << "inside left part" << std::endl;
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
@@ -1130,10 +1136,10 @@ Eigen::MatrixXd surface_least_square_lambda_multiplier_left_part(Bsurface &surfa
     return result;
 }
 // SIDE STOP
-template <typename Tp, typename valueT>
+
 void surface_least_square_lambda_multiplier_left_part(Bsurface &surface,
                                                       const Eigen::MatrixXd &paras,
-                                                      PartialBasis<Tp, valueT> &basis,
+                                                      PartialBasis &basis,
                                                       std::vector<Trip> &tripletes)
 {
     std::cout << "inside left part" << std::endl;
@@ -1151,7 +1157,7 @@ void surface_least_square_lambda_multiplier_left_part(Bsurface &surface,
 
     return;
 }
-template <typename Tp, typename valueT>
+
 Eigen::MatrixXd surface_least_square_lambda_multiplier_right_part(Bsurface &surface,
                                                                   const Eigen::MatrixXd &paras,
                                                                   const Eigen::MatrixXd &points,
@@ -1174,7 +1180,7 @@ Eigen::MatrixXd surface_least_square_lambda_multiplier_right_part(Bsurface &surf
     assert(counter == target_size);
     return result;
 }
-template <typename Tp, typename valueT>
+
 void push_control_point_list_into_surface(Bsurface &surface, const std::vector<Vector3d> &cps)
 {
     int id = 0;
@@ -1195,10 +1201,11 @@ void push_control_point_list_into_surface(Bsurface &surface, const std::vector<V
 }
 
 // Main solving function for control points -> Thin plate energy.
-template <typename Tp, typename valueT>
-void SurfaceOpt<Tp, valueT>::solve_control_points_for_fairing_surface(
-    Bsurface &surface, const Eigen::MatrixXd &paras, const Eigen::MatrixXd &points,
-    PartialBasis<Tp, valueT> &basis)
+
+void Bsurface::solve_control_points_for_fairing_surface(Bsurface &surface,
+                                                        const Eigen::MatrixXd &paras,
+                                                        const Eigen::MatrixXd &points,
+                                                        PartialBasis &basis)
 {
     /// Creating a sparse matrix & input validation
     typedef Eigen::SparseMatrix<double> SparseMatrixXd;
@@ -1256,12 +1263,10 @@ void output_timing()
     std::cout << "get differential time " << time1 << std::endl;
     std::cout << "get integration time " << time2 << std::endl;
 }
-
 template <typename Tp, typename valueT> SurfaceOpt<Tp, valueT>::SurfaceOpt(Bsurface &surface)
 {
     init(surface);
 }
-
 template <typename Tp, typename valueT> void SurfaceOpt<Tp, valueT>::init(Bsurface &surface) {}
 
 } // namespace SIBSplines

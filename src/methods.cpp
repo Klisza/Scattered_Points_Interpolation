@@ -15,8 +15,9 @@
 
 #include <TinyAD/Scalar.hh>
 #include <TinyAD/ScalarFunction.hh>
-
-// using namespace SIBSplines;
+#include <TinyAD/Utils/LineSearch.hh>
+#include <TinyAD/Utils/NewtonDecrement.hh>
+#include <TinyAD/Utils/NewtonDirection.hh>
 
 namespace SIBSplines
 {
@@ -88,6 +89,199 @@ void write_svg_pts(const std::string &file, const Eigen::MatrixXd &param)
     fout << "</svg>" << std::endl;
     fout.close();
 }
+// the output type, the knot vector type, and the value type.
+// These are the operations to compute spline-related functions or values.
+template <typename Tp, typename knotT, typename valueT> class splineBasis
+{
+  public:
+    splineBasis() {};
+    ~splineBasis() {};
+    // the basis functions in each none-zero interval. in each interval there are degree + 1
+    // none-zero basis functions, Each basis function is a polynomial.
+    // std::vector<std::vector<std::vector<T>>> Nips;
+    // the variable u is in [U_{uId}, U_{uId+1}). This function returns double(1) if uID == i,
+    // otherwise double(0)
+    double Ni0_func(const int i, const int uId);
+    std::vector<knotT> Nip_func(const int i, const int p, const int uId,
+                                const std::vector<knotT> &U, const int original_p);
+    // compute the basis w.r.t. the interval, and the values of them
+    std::vector<Tp> computeBasisFunctionValues(const valueT &value, const int uId, const int p,
+                                               const std::vector<knotT> &U);
+    // the order is the order of derivative.bvalues is the basis functions N(value) , dvalues is the
+    // derivatived bvalues of order
+    void computeBasisFunctionDerivativeValues(const valueT &value, const int uId, const int p,
+                                              const int order, const std::vector<knotT> &U,
+                                              std::vector<Tp> &bvalues, std::vector<Tp> &dvalues);
+    void computeBasisFunctionDerivativeAndValues(
+        const valueT &value, const int uId, const int p, const std::vector<knotT> &U,
+        std::vector<std::vector<knotT>> &basisfuncs, std::vector<std::vector<knotT>> &d1funcs,
+        std::vector<std::vector<knotT>> &d2funcs, std::vector<Tp> &bvalues,
+        std::vector<Tp> &d1values, std::vector<Tp> &d2values);
+    ply_operations<Tp, knotT, valueT> PO;
+    std::vector<std::vector<std::vector<knotT>>> basisFunctions;
+};
+template <typename Tp, typename knotT, typename valueT>
+double splineBasis<Tp, knotT, valueT>::Ni0_func(const int i, const int uId)
+{
+    if (i == uId)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+// this version can be really used for treating U as variables, since the equality of two knots is
+// not predicted using the values, but using the degree: original_p to predict the equality of the
+// ends of the clampped B-spline knot vector.
+template <typename Tp, typename knotT, typename valueT>
+std::vector<knotT> splineBasis<Tp, knotT, valueT>::Nip_func(const int i, const int p, const int uId,
+                                                            const std::vector<knotT> &U,
+                                                            const int original_p)
+{
+    if (p == 0)
+    {
+        std::cout << "Error: This function cannot handle degree = 0\n";
+        exit(0);
+    }
+    int pnbr = U.size() - p - 1; // the nbr of basis functions under p
+    if (uId < p || uId >= pnbr)
+    {
+        std::cout << "error in Nip_func: interval id out of range, uid, " << uId << "\n";
+        exit(0);
+    }
+
+    std::vector<knotT> v;
+    // the first repeatative knot region is from U_0 to U_degree, the second is from
+    // U.size()-1-degree to U.size()-1
+    bool firstTerm0 =
+        (i + p <= original_p && i <= original_p) ||
+        (i + p >= U.size() - 1 - original_p && i >= U.size() - 1 - original_p); // U[i + p] <= U[i];
+    bool lastTerm0 = (i + p + 1 <= original_p && i + 1 <= original_p) ||
+                     (i + p + 1 >= U.size() - 1 - original_p &&
+                      i + 1 >= U.size() - 1 - original_p); // U[i + p + 1] <= U[i + 1]; // if the
+                                                           // first or the second term vanishes
+    bool degreeIs0 = p == 1;                               // if the lower level degree is 0
+    if (firstTerm0 && !lastTerm0)                          // only keep the last term
+    {
+        v = {{U[i + p + 1] / (U[i + p + 1] - U[i + 1]),
+              -1 / (U[i + p + 1] - U[i + 1])}}; // U[i+p+1] - u
+        if (!degreeIs0)
+        {
+            return PO.polynomial_times(v, Nip_func(i + 1, p - 1, uId, U, original_p));
+        }
+        else
+        {
+            return PO.polynomial_times_double(v, Ni0_func(i + 1, uId));
+        }
+    }
+    if (lastTerm0 && !firstTerm0) // only keep the first term
+    {
+        v = {{-U[i] / (U[i + p] - U[i]), 1 / (U[i + p] - U[i])}}; // u - U[i]
+        if (!degreeIs0)
+        {
+            return PO.polynomial_times(v, Nip_func(i, p - 1, uId, U, original_p));
+        }
+        else
+        {
+            return PO.polynomial_times_double(v, Ni0_func(i, uId));
+        }
+    }
+    if (firstTerm0 && lastTerm0)
+    {
+        std::cout << "impossible case in Nip_func\n";
+        exit(0);
+    }
+    // division can be properly handled, thus both terms are kept.
+    if (!degreeIs0)
+    {
+        v = {{-U[i] / (U[i + p] - U[i]), 1 / (U[i + p] - U[i])}}; // u - U[i]
+        std::vector<knotT> result1 = PO.polynomial_times(v, Nip_func(i, p - 1, uId, U, original_p));
+
+        v = {{U[i + p + 1] / (U[i + p + 1] - U[i + 1]),
+              -1 / (U[i + p + 1] - U[i + 1])}}; // U[i+p+1] - u
+        std::vector<knotT> result2 =
+            PO.polynomial_times(v, Nip_func(i + 1, p - 1, uId, U, original_p));
+        return PO.polynomial_add(result1, result2);
+    }
+    v = {{-U[i] / (U[i + p] - U[i]), 1 / (U[i + p] - U[i])}}; // u - U[i]
+    std::vector<knotT> result1 = PO.polynomial_times_double(v, Ni0_func(i, uId));
+
+    v = {
+        {U[i + p + 1] / (U[i + p + 1] - U[i + 1]), -1 / (U[i + p + 1] - U[i + 1])}}; // U[i+p+1] - u
+    std::vector<knotT> result2 = PO.polynomial_times_double(v, Ni0_func(i + 1, uId));
+    return PO.polynomial_add(result1, result2);
+}
+
+template <typename Tp, typename knotT, typename valueT>
+std::vector<Tp>
+splineBasis<Tp, knotT, valueT>::computeBasisFunctionValues(const valueT &value, const int uId,
+                                                           const int p, const std::vector<knotT> &U)
+{
+    std::vector<Tp> result(p + 1, 0);
+    // first compute the associated basis functions. Their type is the same as the knot vector U
+    std::vector<std::vector<knotT>> basisFunctions(p + 1);
+    for (int i = 0; i < p + 1; i++)
+    {
+        // if (inDebug)
+        // {
+        //     std::cout << "requiring i " << uId - p + i << ", uid, " << uId << "\n";
+        // }
+        basisFunctions[i] = Nip_func(uId - p + i, p, uId, U, p);
+        result[i] = PO.polynomial_value(basisFunctions[i], value);
+    }
+    return result;
+}
+template <typename Tp, typename knotT, typename valueT>
+void splineBasis<Tp, knotT, valueT>::computeBasisFunctionDerivativeValues(
+    const valueT &value, const int uId, const int p, const int order, const std::vector<knotT> &U,
+    std::vector<Tp> &bvalues, std::vector<Tp> &dvalues)
+{
+
+    bvalues = std::vector<Tp>(p + 1, 0);
+    dvalues = std::vector<Tp>(p + 1, 0);
+    std::vector<std::vector<knotT>> basisFunctions(p + 1), bfds(p + 1);
+    for (int i = 0; i < p + 1; i++)
+    {
+        basisFunctions[i] = Nip_func(uId - p + i, p, uId, U, p);
+        bfds[i] = basisFunctions[i];
+        for (int r = 0; r < order; r++)
+            bfds[i] = PO.polynomial_derivative(bfds[i]);
+
+        bvalues[i] = PO.polynomial_value(basisFunctions[i], value);
+        dvalues[i] = PO.polynomial_value(bfds[i], value);
+    }
+    return;
+}
+template <typename Tp, typename knotT, typename valueT>
+void splineBasis<Tp, knotT, valueT>::computeBasisFunctionDerivativeAndValues(
+    const valueT &value, const int uId, const int p, const std::vector<knotT> &U,
+    std::vector<std::vector<knotT>> &basisfuncs, std::vector<std::vector<knotT>> &d1funcs,
+    std::vector<std::vector<knotT>> &d2funcs, std::vector<Tp> &bvalues, std::vector<Tp> &d1values,
+    std::vector<Tp> &d2values)
+{
+    basisfuncs.resize(p + 1);
+    d1funcs.resize(p + 1);
+    d2funcs.resize(p + 1);
+    bvalues.resize(p + 1);
+    d1values.resize(p + 1);
+    d2values.resize(p + 1);
+    for (int i = 0; i < p + 1; i++)
+    {
+        basisfuncs[i] = Nip_func(uId - p + i, p, uId, U, p);
+        d1funcs[i] = PO.polynomial_derivative(basisfuncs[i]);
+        d2funcs[i] = PO.polynomial_derivative(d1funcs[i]);
+        bvalues[i] = PO.polynomial_value(basisfuncs[i], value);
+        d1values[i] = PO.polynomial_value(d1funcs[i], value);
+        d2values[i] = PO.polynomial_value(d2funcs[i], value);
+    }
+    return;
+}
+
+Eigen::VectorXd list_to_vec(std::vector<double> &vars)
+{
+    Eigen::VectorXd result;
+    return result;
+}
 
 void write_svg_knot_vectors(const std::string &file, const std::vector<double> &U,
                             const std::vector<double> &V)
@@ -152,6 +346,8 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
     // mesh parametrization, and print out the parametrization result as a obj mesh.
     mesh_parameterization(meshfile, ver, param, F);
+    // BW: After parametrization, we should rescale the parametrization region to [a,b]x[c,d], where
+    // [a,b] \in (0,1) and [c,d]\in (0,1), to avoid parameters showing on the boudaries.
     paramout.resize(param.rows(), 3);
     Eigen::VectorXd param_zero = Eigen::VectorXd::Zero(param.rows());
     paramout << param, param_zero;
@@ -169,14 +365,19 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     bool enable_max_fix_nbr = true; // progressively update the knot vectors to make the two knot
                                     // vectors balanced in length.
     // generate knot vectors to make sure the data points can be interpolated
-    // Alg 1 from the paper
     surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U,
                                                 surface.V, param, delta, per, target_steps,
                                                 enable_max_fix_nbr);
     std::cout << "knot vectors generated" << std::endl;
 
+    PartialBasis basis(surface);
+    surface.solve_control_points_for_fairing_surface(
+        surface, param, ver, basis); // solve the control points as initializations.
+    // BW: here, write a list "std::array<int, 2> paraInInterval[int dataPointID]" to record in
+    // which interval each point should stay.
+
     // Calculate the number of variables we solve for.
-    // Control points
+    //  Control points
     int cpSize =
         (surface.U.size() - 1 - surface.degree1) * (surface.V.size() - 1 - surface.degree2);
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
@@ -187,23 +388,104 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     // Fitting energy
     // (d+1)*(d+1) cps * 3 (x,y,z) + 2 * parameters (u,v).
     // For degree 3 = 50 variables
-    func.add_elements<50>(TinyAD::range(nbr),
-                          [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
-                          {
-                              using T = TINYAD_SCALAR_TYPE(element);
-                              Eigen::Index dataID = element.handle;
-                              SurfaceOpt<T, T> sOpt(surface);
-                              PartialBasis<T, T> basis(surface);
-                              element.variables();
+    func.add_elements<50>(
+        TinyAD::range(nbr),
+        [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
+        {
+            using T = TINYAD_SCALAR_TYPE(element);
+            Eigen::Index dataID = element.handle;
 
-                              sOpt.solve_control_points_for_fairing_surface(surface, param, ver,
-                                                                            basis);
+            T parameterU = element.variables(DEFINE_YOUR_VARIABLE_MAPPING_FUNCTION)(0, 0);
+            T parameterV = element.variables(DEFINE_YOUR_VARIABLE_MAPPING_FUNCTION)(0, 0);
+            // get the uv intervals [U[uItv], U[uItv+1])
+            int uItv = paraInInterval[dataID][0];
+            int vItv = paraInInterval[dataID][1];
 
-                              T energy_final;
-                              return energy_final;
-                          });
+            splineBasis<T, double, T> spb; // spline basis computation
+            // get the basis functions. basisU is a vector of size degree1 + 1 to represent a
+            // degree1 polynomial. each element of basisU is of tinyAD type variable
+            std::vector<T> basisU =
+                spb.computeBasisFunctionValues(parameterU, uItv, surface.degree1, surface.U);
+            std::vector<T> basisV =
+                spb.computeBasisFunctionValues(parameterV, vItv, surface.degree2, surface.V);
+            T p00 = 0, p01 = 0, p02 = 0;
+            for (int i = 0; i < surface.degree1 + 1; i++)
+            {
+                for (int j = 0; j < surface.degree2 + 1; j++)
+                {
+                    // for each interval [U[uItv], U[uItv + 1]), the associated control points are
+                    // P[uItv-degree],...,P[uItv]
+                    int lc0 =
+                        ; // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th ControlPoint_x;
+                    int lc1 =
+                        ; // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th ControlPoint_y;
+                    int lc2 =
+                        ; // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th ControlPoint_z;
+                    T pt0 = 0, pt1 = 0, pt2 = 0;
+                    // get the control point
+                    pt0 = element.variables(lc0)(0, 0), pt1 = element.variables(lc1)(0, 0),
+                    pt2 = element.variables(lc2)(0, 0);
+
+                    p00 += pt0 * basisU[i] * basisV[j];
+                    p01 += pt1 * basisU[i] * basisV[j];
+                    p02 += pt2 * basisU[i] * basisV[j];
+                }
+            }
+
+            // std::cout<<"out add elem\n";
+            return (p00 - ver(dataID, 0)) * (p00 - ver(dataID, 0)) +
+                   (p01 - ver(dataID, 1)) * (p01 - ver(dataID, 1)) +
+                   (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
+        });
+
     // Fairing energy manual
 
+    // solve for n iterations.
+    Eigen::VectorXd x = list_to_vec(surface.globVars); // put your variables into a list x
+
+    TinyAD::LinearSolver solver;
+    double convergence_eps = 1e-12; // change it into 1e-6 if you want.
+    std::cout << "check 4\n";
+    for (int i = 0; i < target_steps; ++i)
+    {
+        auto [f, g, H_proj] =
+            func.eval_with_hessian_proj(x); // compute Hessian and gradient of the fitting error
+        TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f);
+        double ferror;
+        s.evaluateFittingError(ferror, false); // compute the fitting error and print it out.
+        std::cout << "sum of squared error " << ferror << "\n";
+        // BW: assemble the fitting Hessian, fitting gradient and fairness Hessian, fairness
+        // gradient together, blend them with their corresponding weights.
+        Eigen::VectorXd d = TinyAD::newton_direction(g, H_proj, solver);
+        // the following variable "sparsity_pattern_dirty" can use the default value "false", since
+        // our sparse matrices are all in the same structure. Thus we comment the following command
+        // out.
+        // solver.sparsity_pattern_dirty =
+        //     true; // this is crutial, since the patterns are always changing in each iteration!
+
+        if (TinyAD::newton_decrement(d, g) <
+            convergence_eps) // if the direction is too far from the gradient direction, break.
+                             // normally this value is set as 1e-6
+            break;
+        // modify the direction vector. 2 options: 1. rescale (backtrace) the whole vector d to keep
+        // the parameters staying in their regions, or 2. only re-scale the parameters that may
+        // exceed their regions.
+        d = s.stepBackTracer(varLevel, d, parSeparation, knotSeparation);
+
+        // BW: write your own line search code, since the line search in TinyAD will only consider
+        // about your fitting energy. we need to implement one with considering both the energies.
+        x = TinyAD::line_search(x, d, f, g, func);
+
+        if ((x - list_to_vec(s.globVars)).norm() <
+            convergence_eps) // if the step is too small, break
+        {
+            std::cout << "break because the line searched step is too small: "
+                      << (x - list_to_vec(s.globVars)).norm() << "\n";
+            break;
+        }
+        std::cout << "the dx, " << d.norm() << ", the backtraced dx "
+                  << (x - list_to_vec(s.globVars)).norm() << "\n";
+    }
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
