@@ -21,6 +21,8 @@
 
 #define PARAMETER true
 #define CP false
+#define UDIR true
+#define VDIR false
 
 namespace SIBSplines
 {
@@ -363,30 +365,33 @@ int return_closest_knot_index_to_param(std::vector<double> UV, double param)
 }
 
 // Gives you the varaible depending on U or V direction, variable type (control point or parameter)
-int variableMap(bool Udirection, bool ParOrCp, int pos, int id)
+int variableMap(bool Udirection, bool ParOrCp, int pos, int pos2, int xyz, Bsurface surface)
 {
+
     int result;
     if (ParOrCp)
     {
-        result = parameterLocation(Udirection, pos, id);
+        result = parameterLocation(Udirection, pos, surface);
     }
     else
     {
-        result = controlPointLocation(Udirection, pos, id);
+        int u, v = pos, pos2;
+        result = u * surface.cpCols + v + xyz * surface.cpSize;
     }
     return result;
 }
 
-int parameterLocation(bool Udirection, int pos, int id)
+int parameterLocation(bool Udirection, int pos, Bsurface surface)
 {
     if (Udirection)
     {
+        return surface.globVars[surface.cpSize * 3 + pos];
     }
     else
     {
+        return surface.globVars[surface.cpSize * 3 + pos + surface.paramSize];
     }
 }
-int controlPointLocation(bool Udirection, int pos, int id) {}
 
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
 {
@@ -433,22 +438,23 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
     //  Calculate the number of variables we solve for.
     //  Number of control points
-    int cpSize =
+    surface.paramSize = param_nbr;
+    surface.cpSize =
         (surface.U.size() - 1 - surface.degree1) * (surface.V.size() - 1 - surface.degree2);
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
-    int varSize = 2 * param_nbr + 3 * cpSize;
+    int varSize = 2 * param_nbr + 3 * surface.cpSize;
     // Init globVars vector
-    int cpCols = surface.control_points.size();
-    int cpRows = surface.control_points[0].size();
+    surface.cpCols = surface.control_points.size();
+    surface.cpRows = surface.control_points[0].size();
     // Add control points to globVars
     // Put the grid structure into a vector (i,j) directions same as (u,v) -> variableMap
     for (int k = 0; k < 3; k++)
     {
-        for (int i = 0; i < cpRows; i++)
+        for (int i = 0; i < surface.cpRows; i++)
         {
-            for (int j = 0; j < cpCols; j++)
+            for (int j = 0; j < surface.cpCols; j++)
             {
-                surface.globVars[i * j + k * cpSize] = surface.control_points[i][j](k);
+                surface.globVars[i * j + k * surface.cpSize] = surface.control_points[i][j](k);
             }
         }
     }
@@ -457,7 +463,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     {
         for (int i = 0; i < param.size(); i++)
         {
-            surface.globVars[i + k * param.size() + 3 * cpSize] = param(i, k);
+            surface.globVars[i + k * param.size() + 3 * surface.cpSize] = param(i, k);
         }
     }
 
@@ -473,8 +479,10 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
             using T = TINYAD_SCALAR_TYPE(element);
             Eigen::Index dataID = element.handle;
 
-            T parameterU = element.variables(variableMap())(0, 0);
-            T parameterV = element.variables(variableMap())(0, 0);
+            T parameterU =
+                element.variables(variableMap(UDIR, PARAMETER, dataID, 0, 0, surface))(0, 0);
+            T parameterV =
+                element.variables(variableMap(VDIR, PARAMETER, dataID, 0, 0, surface))(0, 0);
             // get the uv intervals [U[uItv], U[uItv+1])
             int uItv = paraInInterval[dataID][0];
             int vItv = paraInInterval[dataID][1];
@@ -493,12 +501,18 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                 {
                     // for each interval [U[uItv], U[uItv + 1]), the associated control points are
                     // P[uItv-degree],...,P[uItv]
-                    int lc0 =
-                        ; // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th ControlPoint_x;
-                    int lc1 =
-                        ; // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th ControlPoint_y;
-                    int lc2 =
-                        ; // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th ControlPoint_z;
+                    int lc0 = element.variables(variableMap(
+                        false, CP, uItv - surface.degree1 + i, vItv - surface.degree2 + j, 0,
+                        surface)); // getTheLocationOfThe(uItv-degree1+i,
+                                   // vItv-degree2+j)-th ControlPoint_x;
+                    int lc1 = element.variables(variableMap(
+                        false, CP, uItv - surface.degree1 + i, vItv - surface.degree2 + j, 1,
+                        surface)); // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th
+                                   // ControlPoint_y;
+                    int lc2 = element.variables(variableMap(
+                        false, CP, uItv - surface.degree1 + i, vItv - surface.degree2 + j, 2,
+                        surface)); // getTheLocationOfThe(uItv-degree1+i, vItv-degree2+j)-th
+                                   // ControlPoint_z;
                     T pt0 = 0, pt1 = 0, pt2 = 0;
                     // get the control point
                     pt0 = element.variables(lc0)(0, 0), pt1 = element.variables(lc1)(0, 0),
@@ -510,7 +524,6 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                 }
             }
 
-            // std::cout<<"out add elem\n";
             return (p00 - ver(dataID, 0)) * (p00 - ver(dataID, 0)) +
                    (p01 - ver(dataID, 1)) * (p01 - ver(dataID, 1)) +
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));

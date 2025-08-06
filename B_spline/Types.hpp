@@ -45,6 +45,10 @@ class Bsurface
     int degree1;
     int degree2;
     std::vector<double> globVars;
+    int paramSize;
+    int cpCols;
+    int cpRows;
+    int cpSize;
     std::vector<double> U;
     std::vector<double> V;
     double upara;
