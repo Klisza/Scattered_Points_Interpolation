@@ -27,13 +27,50 @@ template <typename Tp, typename knotT, typename valueT> class ply_operations
   public:
     ply_operations() {};
     ~ply_operations() {};
-    std::vector<Tp> polynomial_add(const std::vector<Tp> &poly1, const std::vector<Tp> &poly2);
-    std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const std::vector<Tp> &poly2);
-    std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const Tp &nbr);
-    Tp power(const valueT &value, const int order);
-    Tp polynomial_value(const std::vector<Tp> &poly, const valueT para);
-    std::vector<Tp> polynomial_integration(const std::vector<Tp> &poly);
-    Tp polynomial_integration(const std::vector<Tp> &poly, const Tp lower, const Tp upper);
+    std::vector<knotT> polynomial_add(const std::vector<knotT> &poly1,
+                                      const std::vector<knotT> &poly2); // +
+    std::vector<knotT> polynomial_times(const std::vector<knotT> &poly1,
+                                        const std::vector<knotT> &poly2);          // +
+    std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const Tp &nbr); // +
+    std::vector<knotT> polynomial_times_double(const std::vector<knotT> &poly1,
+                                               const double &nbr);             // +
+    std::vector<knotT> polynomial_derivative(const std::vector<knotT> &poly1); // Not implemented
+    Tp polynomial_value(const std::vector<knotT> &poly, const valueT &para);   // +
+    std::vector<Tp> polynomial_integration(const std::vector<Tp> &poly);       // +
+    Tp polynomial_integration(const std::vector<Tp> &poly, const Tp &lower, const Tp &upper); // +
+    Tp power(const valueT &value, const int order);                                           // +
+};
+
+// the output type, the knot vector type, and the value type.
+// These are the operations to compute spline-related functions or values.
+template <typename Tp, typename knotT, typename valueT> class splineBasis
+{
+  public:
+    splineBasis() {};
+    ~splineBasis() {};
+    // the basis functions in each none-zero interval. in each interval there are degree + 1
+    // none-zero basis functions, Each basis function is a polynomial.
+    // std::vector<std::vector<std::vector<T>>> Nips;
+    // the variable u is in [U_{uId}, U_{uId+1}). This function returns double(1) if uID == i,
+    // otherwise double(0)
+    double Ni0_func(const int i, const int uId);
+    std::vector<knotT> Nip_func(const int i, const int p, const int uId,
+                                const std::vector<knotT> &U, const int original_p);
+    // compute the basis w.r.t. the interval, and the values of them
+    std::vector<Tp> computeBasisFunctionValues(const valueT &value, const int uId, const int p,
+                                               const std::vector<knotT> &U);
+    // the order is the order of derivative.bvalues is the basis functions N(value) , dvalues is the
+    // derivatived bvalues of order
+    void computeBasisFunctionDerivativeValues(const valueT &value, const int uId, const int p,
+                                              const int order, const std::vector<knotT> &U,
+                                              std::vector<Tp> &bvalues, std::vector<Tp> &dvalues);
+    void computeBasisFunctionDerivativeAndValues(
+        const valueT &value, const int uId, const int p, const std::vector<knotT> &U,
+        std::vector<std::vector<knotT>> &basisfuncs, std::vector<std::vector<knotT>> &d1funcs,
+        std::vector<std::vector<knotT>> &d2funcs, std::vector<Tp> &bvalues,
+        std::vector<Tp> &d1values, std::vector<Tp> &d2values);
+    ply_operations<Tp, knotT, valueT> PO;
+    std::vector<std::vector<std::vector<knotT>>> basisFunctions;
 };
 
 class PartialBasis;
