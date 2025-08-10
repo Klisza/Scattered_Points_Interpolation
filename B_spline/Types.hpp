@@ -21,7 +21,7 @@ struct per_too_large
 {
     bool flag;
 };
-// Should be templated for evaluation
+
 template <typename Tp, typename knotT, typename valueT> class ply_operations
 {
   public:
@@ -113,7 +113,6 @@ class Bsurface
                                                   const Eigen::MatrixXd &points,
                                                   PartialBasis &basis);
 
-    // ..
     Eigen::MatrixXd interpolation_err_for_apprximation(const Eigen::MatrixXd &ver,
                                                        const Eigen::MatrixXd &param,
                                                        Bsurface &surface, double &max_err);

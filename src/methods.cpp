@@ -13,7 +13,6 @@
 #include <igl/harmonic.h>
 #include <igl/write_triangle_mesh.h>
 
-#include <TinyAD/Scalar.hh>
 #include <TinyAD/ScalarFunction.hh>
 #include <TinyAD/Utils/LineSearch.hh>
 #include <TinyAD/Utils/NewtonDecrement.hh>
@@ -185,11 +184,11 @@ int parameterLocation(bool Udirection, int pos, Bsurface surface)
 {
     if (Udirection)
     {
-        return surface.globVars[surface.cpSize * 3 + pos];
+        return surface.cpSize * 3 + pos;
     }
     else
     {
-        return surface.globVars[surface.cpSize * 3 + pos + surface.paramSize];
+        return surface.cpSize * 3 + pos + surface.paramSize;
     }
 }
 

@@ -35,7 +35,7 @@ Vector3d Bcurve::BsplinePoint(const int degree, const std::vector<double> &U, co
 
 // TODO this error is not what we want
 //  TODO maybe merge this with surface solving
-Eigen::MatrixXd slove_linear_system(const Eigen::MatrixXd &A, const Eigen::MatrixXd &b,
+Eigen::MatrixXd solve_linear_system(const Eigen::MatrixXd &A, const Eigen::MatrixXd &b,
                                     const bool check_error, double &relative_error)
 {
     Eigen::MatrixXd x = A.colPivHouseholderQr().solve(b);
@@ -117,7 +117,7 @@ Eigen::MatrixXd Bcurve::solve_curve_control_points(const int degree, const std::
 
     bool check_error = true;
     double error;
-    Eigen::MatrixXd interior = slove_linear_system(NTN, R, check_error, error);
+    Eigen::MatrixXd interior = solve_linear_system(NTN, R, check_error, error);
     std::cout << "error, " << error << std::endl;
 
     result.row(0) = points[0];
