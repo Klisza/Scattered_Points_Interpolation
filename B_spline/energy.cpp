@@ -13,13 +13,29 @@ igl::Timer timer;
 double time0 = 0, time1 = 0, time2 = 0, time3 = 0;
 
 // These functions handle the polynomials.
-template <typename Tp, typename knotT, typename valueT>
-std::vector<knotT>
-ply_operations<Tp, knotT, valueT>::polynomial_add(const std::vector<knotT> &poly1,
-                                                  const std::vector<knotT> &poly2)
+std::vector<double> ply_operations::polynomial_simplify(const std::vector<double> &poly)
+{
+    std::vector<double> result = poly;
+    int size = poly.size();
+    for (int i = 0; i < size - 1; i++)
+    {
+        if (result[size - i - 1] == 0)
+        {
+            result.pop_back();
+        }
+        else
+        {
+            break;
+        }
+    }
+    return result;
+}
+
+std::vector<double> ply_operations::polynomial_add(const std::vector<double> &poly1,
+                                                   const std::vector<double> &poly2)
 {
     int size = std::max(poly1.size(), poly2.size());
-    std::vector<Tp> result(size);
+    std::vector<double> result(size);
     for (int i = 0; i < size; i++)
     {
         bool flag1 = i < poly1.size();
@@ -37,16 +53,14 @@ ply_operations<Tp, knotT, valueT>::polynomial_add(const std::vector<knotT> &poly
             result[i] = poly2[i];
         }
     }
-    return result; // ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
+    return ply_operations::polynomial_simplify(result);
 }
-// Cauchy product/Polynomial product
-template <typename Tp, typename knotT, typename valueT>
-std::vector<knotT>
-ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<knotT> &poly1,
-                                                    const std::vector<knotT> &poly2)
+
+std::vector<double> ply_operations::polynomial_times(const std::vector<double> &poly1,
+                                                     const std::vector<double> &poly2)
 {
     int size = poly1.size() + poly2.size() - 1;
-    std::vector<Tp> result(size);
+    std::vector<double> result(size);
     for (int i = 0; i < size; i++)
     { // initialize the result
         result[i] = 0;
@@ -59,103 +73,57 @@ ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<knotT> &po
             result[i + j] += poly1[i] * poly2[j];
         }
     }
-    return result; // ply_operations<Tp, knotT, valueT>::polynomial_simplify(result);
+    return ply_operations::polynomial_simplify(result);
 }
-// Scalar multiplication
-template <typename Tp, typename knotT, typename valueT>
-std::vector<Tp> ply_operations<Tp, knotT, valueT>::polynomial_times(const std::vector<Tp> &poly1,
-                                                                    const Tp &nbr)
+std::vector<double> ply_operations::polynomial_times(const std::vector<double> &poly1,
+                                                     const double &nbr)
 {
-    std::vector<Tp> result;
+    std::vector<double> result;
+    if (nbr == 0)
+    {
+        result.resize(1);
+        result[0] = 0;
+        return result;
+    }
     result = poly1;
     for (int i = 0; i < result.size(); i++)
     {
         result[i] *= nbr;
     }
 
-    return result;
+    return ply_operations::polynomial_simplify(result);
 }
-// This might need to be updated to work on TinyAD since it should use polynomial_times because of
-// the AD type.
-template <typename Tp, typename knotT, typename valueT>
-Tp ply_operations<Tp, knotT, valueT>::power(const valueT &value, const int order)
-{
-    if (order == 0)
-    {
-        return 1;
-    }
-    Tp result = value;
-    for (int i = 1; i < order; i++)
-    {
-        result = result * value;
-    }
-    return result;
-}
-template <typename Tp, typename knotT, typename valueT>
-Tp ply_operations<Tp, knotT, valueT>::polynomial_value(const std::vector<knotT> &poly,
-                                                       const valueT &para)
+
+double ply_operations::polynomial_value(const std::vector<double> &poly, const double para)
 {
     double result = 0;
     for (int i = 0; i < poly.size(); i++)
     {
-        result += poly[i] * power(para, i);
+        result += poly[i] * std::pow(para, i);
     }
     return result;
 }
-template <typename Tp, typename knotT, typename valueT>
-std::vector<Tp>
-ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp> &poly)
+
+std::vector<double> ply_operations::polynomial_integration(const std::vector<double> &poly)
 {
-    std::vector<Tp> result(poly.size() + 1);
+    std::vector<double> result(poly.size() + 1);
     result[0] = 0;
     for (int i = 1; i < result.size(); i++)
     {
         result[i] = poly[i - 1] / i;
     }
-    return result;
+    return ply_operations::polynomial_simplify(result);
 }
-
-template <typename Tp, typename knotT, typename valueT>
-Tp ply_operations<Tp, knotT, valueT>::polynomial_integration(const std::vector<Tp> &poly,
-                                                             const Tp &lower, const Tp &upper)
+double ply_operations::polynomial_integration(const std::vector<double> &poly, const double lower,
+                                              const double upper)
 {
-    Tp up = ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), upper);
-    Tp lw = ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), lower);
+    double up =
+        ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), upper);
+    double lw =
+        ply_operations::polynomial_value(ply_operations::polynomial_integration(poly), lower);
     return up - lw;
 }
 
-template <typename Tp, typename knotT, typename valueT>
-std::vector<knotT>
-ply_operations<Tp, knotT, valueT>::polynomial_times_double(const std::vector<knotT> &poly1,
-                                                           const double &nbr)
-{
-    std::vector<knotT> result(poly1.size());
-    for (int i = 0; i < result.size(); i++)
-    {
-        result[i] = poly1[i] * nbr;
-    }
-
-    return result;
-}
-
-template <typename Tp, typename knotT, typename valueT>
-std::vector<knotT>
-ply_operations<Tp, knotT, valueT>::polynomial_derivative(const std::vector<knotT> &poly1)
-{
-    std::vector<knotT> result;
-    if (poly1.size() - 1 == 0)
-    {
-        result = {0};
-        return result;
-    }
-    result.resize(poly1.size() - 1);
-    for (int i = 0; i < result.size(); i++)
-    {
-        result[i] = poly1[i + 1] * (i + 1);
-    }
-    return result;
-}
-// order 1 differential. I guess obsolete with TinyAD? ////
 const std::vector<double> polynomial_differential(const std::vector<double> &func)
 {
     std::vector<double> result;
@@ -187,7 +155,6 @@ std::vector<double> Ni0_func(const int i, const double u, const std::vector<doub
 
 std::vector<double> handle_division_func(const std::vector<double> &a, const double b)
 {
-    ply_operations<double, double, double> PO;
     std::vector<double> result;
     if (b == 0)
     {
@@ -197,12 +164,11 @@ std::vector<double> handle_division_func(const std::vector<double> &a, const dou
         return result;
     }
     else
-        return PO.polynomial_times(a, 1 / b);
+        return ply_operations::polynomial_times(a, 1 / b);
 }
 
 std::vector<double> Nip_func(const int i, const int p, const double u, const std::vector<double> &U)
 {
-    ply_operations<double, double, double> PO;
     std::vector<double> result;
     if (p == 0)
     {
@@ -224,170 +190,15 @@ std::vector<double> Nip_func(const int i, const int p, const double u, const std
     }
     std::vector<double> v;
     v = {{-U[i], 1}}; // u - U[i]
-    std::vector<double> result1 =
-        PO.polynomial_times(handle_division_func(v, U[i + p] - U[i]), Nip_func(i, p - 1, u, U));
+    std::vector<double> result1 = ply_operations::polynomial_times(
+        handle_division_func(v, U[i + p] - U[i]), Nip_func(i, p - 1, u, U));
 
     v = {{U[i + p + 1], -1}}; // U[i+p+1] - u
-    std::vector<double> result2 = PO.polynomial_times(
+    std::vector<double> result2 = ply_operations::polynomial_times(
         handle_division_func(v, U[i + p + 1] - U[i + 1]), Nip_func(i + 1, p - 1, u, U));
-    return PO.polynomial_add(result1, result2);
+    return ply_operations::polynomial_add(result1, result2);
 }
 
-template <typename Tp, typename knotT, typename valueT>
-double splineBasis<Tp, knotT, valueT>::Ni0_func(const int i, const int uId)
-{
-    if (i == uId)
-    {
-        return 1;
-    }
-    return 0;
-}
-
-// this version can be really used for treating U as variables, since the equality of two knots is
-// not predicted using the values, but using the degree: original_p to predict the equality of the
-// ends of the clampped B-spline knot vector.
-template <typename Tp, typename knotT, typename valueT>
-std::vector<knotT> splineBasis<Tp, knotT, valueT>::Nip_func(const int i, const int p, const int uId,
-                                                            const std::vector<knotT> &U,
-                                                            const int original_p)
-{
-    if (p == 0)
-    {
-        std::cout << "Error: This function cannot handle degree = 0\n";
-        exit(0);
-    }
-    int pnbr = U.size() - p - 1; // the nbr of basis functions under p
-    if (uId < p || uId >= pnbr)
-    {
-        std::cout << "error in Nip_func: interval id out of range, uid, " << uId << "\n";
-        exit(0);
-    }
-
-    std::vector<knotT> v;
-    // the first repeatative knot region is from U_0 to U_degree, the second is from
-    // U.size()-1-degree to U.size()-1
-    bool firstTerm0 =
-        (i + p <= original_p && i <= original_p) ||
-        (i + p >= U.size() - 1 - original_p && i >= U.size() - 1 - original_p); // U[i + p] <= U[i];
-    bool lastTerm0 = (i + p + 1 <= original_p && i + 1 <= original_p) ||
-                     (i + p + 1 >= U.size() - 1 - original_p &&
-                      i + 1 >= U.size() - 1 - original_p); // U[i + p + 1] <= U[i + 1]; // if the
-                                                           // first or the second term vanishes
-    bool degreeIs0 = p == 1;                               // if the lower level degree is 0
-    if (firstTerm0 && !lastTerm0)                          // only keep the last term
-    {
-        v = {{U[i + p + 1] / (U[i + p + 1] - U[i + 1]),
-              -1 / (U[i + p + 1] - U[i + 1])}}; // U[i+p+1] - u
-        if (!degreeIs0)
-        {
-            return PO.polynomial_times(v, Nip_func(i + 1, p - 1, uId, U, original_p));
-        }
-        else
-        {
-            return PO.polynomial_times_double(v, Ni0_func(i + 1, uId));
-        }
-    }
-    if (lastTerm0 && !firstTerm0) // only keep the first term
-    {
-        v = {{-U[i] / (U[i + p] - U[i]), 1 / (U[i + p] - U[i])}}; // u - U[i]
-        if (!degreeIs0)
-        {
-            return PO.polynomial_times(v, Nip_func(i, p - 1, uId, U, original_p));
-        }
-        else
-        {
-            return PO.polynomial_times_double(v, Ni0_func(i, uId));
-        }
-    }
-    if (firstTerm0 && lastTerm0)
-    {
-        std::cout << "impossible case in Nip_func\n";
-        exit(0);
-    }
-    // division can be properly handled, thus both terms are kept.
-    if (!degreeIs0)
-    {
-        v = {{-U[i] / (U[i + p] - U[i]), 1 / (U[i + p] - U[i])}}; // u - U[i]
-        std::vector<knotT> result1 = PO.polynomial_times(v, Nip_func(i, p - 1, uId, U, original_p));
-
-        v = {{U[i + p + 1] / (U[i + p + 1] - U[i + 1]),
-              -1 / (U[i + p + 1] - U[i + 1])}}; // U[i+p+1] - u
-        std::vector<knotT> result2 =
-            PO.polynomial_times(v, Nip_func(i + 1, p - 1, uId, U, original_p));
-        return PO.polynomial_add(result1, result2);
-    }
-    v = {{-U[i] / (U[i + p] - U[i]), 1 / (U[i + p] - U[i])}}; // u - U[i]
-    std::vector<knotT> result1 = PO.polynomial_times_double(v, Ni0_func(i, uId));
-
-    v = {
-        {U[i + p + 1] / (U[i + p + 1] - U[i + 1]), -1 / (U[i + p + 1] - U[i + 1])}}; // U[i+p+1] - u
-    std::vector<knotT> result2 = PO.polynomial_times_double(v, Ni0_func(i + 1, uId));
-    return PO.polynomial_add(result1, result2);
-}
-
-template <typename Tp, typename knotT, typename valueT>
-std::vector<Tp>
-splineBasis<Tp, knotT, valueT>::computeBasisFunctionValues(const valueT &value, const int uId,
-                                                           const int p, const std::vector<knotT> &U)
-{
-    std::vector<Tp> result(p + 1, 0);
-    // first compute the associated basis functions. Their type is the same as the knot vector U
-    std::vector<std::vector<knotT>> basisFunctions(p + 1);
-    for (int i = 0; i < p + 1; i++)
-    {
-        basisFunctions[i] = Nip_func(uId - p + i, p, uId, U, p);
-        result[i] = PO.polynomial_value(basisFunctions[i], value);
-    }
-    return result;
-}
-template <typename Tp, typename knotT, typename valueT>
-void splineBasis<Tp, knotT, valueT>::computeBasisFunctionDerivativeValues(
-    const valueT &value, const int uId, const int p, const int order, const std::vector<knotT> &U,
-    std::vector<Tp> &bvalues, std::vector<Tp> &dvalues)
-{
-
-    bvalues = std::vector<Tp>(p + 1, 0);
-    dvalues = std::vector<Tp>(p + 1, 0);
-    std::vector<std::vector<knotT>> basisFunctions(p + 1), bfds(p + 1);
-    for (int i = 0; i < p + 1; i++)
-    {
-        basisFunctions[i] = Nip_func(uId - p + i, p, uId, U, p);
-        bfds[i] = basisFunctions[i];
-        for (int r = 0; r < order; r++)
-            bfds[i] = PO.polynomial_derivative(bfds[i]);
-
-        bvalues[i] = PO.polynomial_value(basisFunctions[i], value);
-        dvalues[i] = PO.polynomial_value(bfds[i], value);
-    }
-    return;
-}
-
-template <typename Tp, typename knotT, typename valueT>
-void splineBasis<Tp, knotT, valueT>::computeBasisFunctionDerivativeAndValues(
-    const valueT &value, const int uId, const int p, const std::vector<knotT> &U,
-    std::vector<std::vector<knotT>> &basisfuncs, std::vector<std::vector<knotT>> &d1funcs,
-    std::vector<std::vector<knotT>> &d2funcs, std::vector<Tp> &bvalues, std::vector<Tp> &d1values,
-    std::vector<Tp> &d2values)
-{
-    basisfuncs.resize(p + 1);
-    d1funcs.resize(p + 1);
-    d2funcs.resize(p + 1);
-    bvalues.resize(p + 1);
-    d1values.resize(p + 1);
-    d2values.resize(p + 1);
-    for (int i = 0; i < p + 1; i++)
-    {
-        basisfuncs[i] = Nip_func(uId - p + i, p, uId, U, p);
-        d1funcs[i] = PO.polynomial_derivative(basisfuncs[i]);
-        d2funcs[i] = PO.polynomial_derivative(d1funcs[i]);
-        bvalues[i] = PO.polynomial_value(basisfuncs[i], value);
-        d1values[i] = PO.polynomial_value(d1funcs[i], value);
-        d2values[i] = PO.polynomial_value(d2funcs[i], value);
-    }
-    return;
-}
-
-// Same thing here TinyAD should autodifferenciate this whole thing. ////
 const std::vector<double> polynomial_differential(const std::vector<double> &func, const int order)
 {
     std::vector<double> result = func;
@@ -407,6 +218,7 @@ const std::vector<double> polynomial_differential(const std::vector<double> &fun
     }
     return result;
 }
+// #############################################
 void PolynomialBasis::init(Bsurface &surface)
 {
     Uknot = surface.U;
@@ -509,7 +321,6 @@ std::vector<double> basisValues(const int whichItv, const int degree,
                                 const std::vector<std::vector<std::vector<double>>> &basis,
                                 const double param)
 {
-    ply_operations<double, double, double> PO;
     std::vector<double> result(degree + 1);
     for (int i = 0; i < degree + 1; i++)
     {
@@ -522,7 +333,7 @@ std::vector<double> basisValues(const int whichItv, const int degree,
             std::cout << "The basis whihcitv is empty, which itv " << whichItv
                       << ", the size of basis functions " << basis.size() << "\n";
         }
-        result[i] = PO.polynomial_value(basis[whichItv][i], param);
+        result[i] = ply_operations::polynomial_value(basis[whichItv][i], param);
     }
     return result;
 }
@@ -691,7 +502,6 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
                                 const int partial2, const int i1, const int i2, const double u1,
                                 const double u2, PolynomialBasis &basis, const bool uv)
 {
-    ply_operations<double, double, double> PO;
     timer.start();
     std::vector<double> func1 = basis.poly(i1, u1, uv);
     // Nip_func(i1, degree, u1, U);
@@ -722,7 +532,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     // print_vector(func1);
     // print_vector(func2);
     timer.start();
-    std::vector<double> func = PO.polynomial_times(func1, func2);
+    std::vector<double> func = ply_operations::polynomial_times(func1, func2);
     // std::cout << "times" << std::endl;
     // print_vector(func);
     double upper = u2;
@@ -730,7 +540,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     {
         upper = U.back() - SCALAR_ZERO;
     }
-    double result = PO.polynomial_integration(func, u1, upper);
+    double result = ply_operations::polynomial_integration(func, u1, upper);
     timer.stop();
     time2 += timer.getElapsedTimeInMilliSec();
 
@@ -741,7 +551,6 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
                                 const int partial2, const int i1, const int i2, const double u1,
                                 const double u2, PartialBasis &basis, const bool uv)
 {
-    ply_operations<double, double, double> PO;
     timer.start();
     // std::vector<double> func1 = basis.poly(i1, u1, uv);
     // std::vector<double> func2 = basis.poly(i2, u1, uv);
@@ -755,14 +564,14 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     time1 += timer.getElapsedTimeInMilliSec();
 
     timer.start();
-    std::vector<double> func = PO.polynomial_times(func1, func2);
+    std::vector<double> func = ply_operations::polynomial_times(func1, func2);
 
     double upper = u2;
     if (u2 == U.back())
     {
         upper = U.back() - SCALAR_ZERO;
     }
-    double result = PO.polynomial_integration(func, u1, upper);
+    double result = ply_operations::polynomial_integration(func, u1, upper);
     timer.stop();
     time2 += timer.getElapsedTimeInMilliSec();
 
@@ -776,7 +585,6 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
                                 const double u2)
 {
     timer.start();
-    ply_operations<double, double, double> PO;
     std::vector<double> func1 = Nip_func(i1, degree, u1, U);
     std::vector<double> func2 = Nip_func(i2, degree, u1, U);
     timer.stop();
@@ -794,7 +602,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     // print_vector(func1);
     // print_vector(func2);
     timer.start();
-    std::vector<double> func = PO.polynomial_times(func1, func2);
+    std::vector<double> func = ply_operations::polynomial_times(func1, func2);
     // std::cout << "times" << std::endl;
     // print_vector(func);
     double upper = u2;
@@ -802,7 +610,7 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
     {
         upper = U.back() - SCALAR_ZERO;
     }
-    double result = PO.polynomial_integration(func, u1, upper);
+    double result = ply_operations::polynomial_integration(func, u1, upper);
     timer.stop();
     time2 += timer.getElapsedTimeInMilliSec();
 
@@ -934,18 +742,17 @@ double discrete_surface_partial_value_squared(const int partial1, const int part
                                               const int j, Bsurface &surface, PartialBasis &basis,
                                               const double u, const double v)
 {
-    ply_operations<double, double, double> PO;
     int p = surface.degree1;
     int q = surface.degree2;
     Eigen::VectorXd Nl(p + 1);
     Eigen::VectorXd Nr(q + 1);
     for (int k = 0; k < p + 1; k++)
     {
-        Nl[k] = PO.polynomial_value(basis.poly(i - p + k, u, 0, partial1), u);
+        Nl[k] = ply_operations::polynomial_value(basis.poly(i - p + k, u, 0, partial1), u);
     }
     for (int k = 0; k < q + 1; k++)
     {
-        Nr[k] = PO.polynomial_value(basis.poly(j - q + k, v, 1, partial2), v);
+        Nr[k] = ply_operations::polynomial_value(basis.poly(j - q + k, v, 1, partial2), v);
     }
     Eigen::MatrixXd px(p + 1, q + 1), py(p + 1, q + 1), pz(p + 1, q + 1);
     for (int k1 = 0; k1 < p + 1; k1++)

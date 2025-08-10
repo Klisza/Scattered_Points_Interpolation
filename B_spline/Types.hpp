@@ -22,23 +22,39 @@ struct per_too_large
     bool flag;
 };
 
-template <typename Tp, typename knotT, typename valueT> class ply_operations
+namespace ply_operations
+{
+std::vector<double> polynomial_simplify(const std::vector<double> &poly);
+std::vector<double> polynomial_add(const std::vector<double> &poly1,
+                                   const std::vector<double> &poly2);
+std::vector<double> polynomial_times(const std::vector<double> &poly1,
+                                     const std::vector<double> &poly2);
+std::vector<double> polynomial_times(const std::vector<double> &poly1, const double &nbr);
+double polynomial_value(const std::vector<double> &poly, const double para);
+std::vector<double> polynomial_integration(const std::vector<double> &poly);
+double polynomial_integration(const std::vector<double> &poly, const double lower,
+                              const double upper);
+} // namespace ply_operations
+
+template <typename Tp, typename knotT, typename valueT> class ply_operationsT
 {
   public:
-    ply_operations() {};
-    ~ply_operations() {};
+    ply_operationsT() {};
+    ~ply_operationsT() {};
+    // std::vector<Tp> polynomial_simplify(const std::vector<Tp> &poly); // using the tinyAD, the
+    // simplification will not work
     std::vector<knotT> polynomial_add(const std::vector<knotT> &poly1,
-                                      const std::vector<knotT> &poly2); // +
+                                      const std::vector<knotT> &poly2); //
     std::vector<knotT> polynomial_times(const std::vector<knotT> &poly1,
-                                        const std::vector<knotT> &poly2);          // +
-    std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const Tp &nbr); // +
+                                        const std::vector<knotT> &poly2);          //
+    std::vector<Tp> polynomial_times(const std::vector<Tp> &poly1, const Tp &nbr); //
     std::vector<knotT> polynomial_times_double(const std::vector<knotT> &poly1,
-                                               const double &nbr);             // +
-    std::vector<knotT> polynomial_derivative(const std::vector<knotT> &poly1); // Not implemented
-    Tp polynomial_value(const std::vector<knotT> &poly, const valueT &para);   // +
-    std::vector<Tp> polynomial_integration(const std::vector<Tp> &poly);       // +
-    Tp polynomial_integration(const std::vector<Tp> &poly, const Tp &lower, const Tp &upper); // +
-    Tp power(const valueT &value, const int order);                                           // +
+                                               const double &nbr); //
+    std::vector<knotT> polynomial_derivative(const std::vector<knotT> &poly1);
+    Tp polynomial_value(const std::vector<knotT> &poly, const valueT &para);
+    std::vector<Tp> polynomial_integration(const std::vector<Tp> &poly);
+    Tp polynomial_integration(const std::vector<Tp> &poly, const Tp &lower, const Tp &upper);
+    Tp power(const valueT &value, const int order);
 };
 
 // the output type, the knot vector type, and the value type.
@@ -69,7 +85,7 @@ template <typename Tp, typename knotT, typename valueT> class splineBasis
         std::vector<std::vector<knotT>> &basisfuncs, std::vector<std::vector<knotT>> &d1funcs,
         std::vector<std::vector<knotT>> &d2funcs, std::vector<Tp> &bvalues,
         std::vector<Tp> &d1values, std::vector<Tp> &d2values);
-    ply_operations<Tp, knotT, valueT> PO;
+    ply_operationsT<Tp, knotT, valueT> PO;
     std::vector<std::vector<std::vector<knotT>>> basisFunctions;
 };
 
