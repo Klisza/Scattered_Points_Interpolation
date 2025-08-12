@@ -17,4 +17,6 @@ double construct_an_integration(const int degree, const std::vector<double> &U, 
 void push_control_point_list_into_surface(Bsurface &surface, const std::vector<Vector3d> &cps);
 void push_p_lambda_vector_to_control_points(const Eigen::MatrixXd &pl, const int dimension,
                                             std::vector<Vector3d> &control_points);
+void energy_part_of_surface_least_square(Bsurface &surface, PartialBasis &basis,
+                                         std::vector<Trip> &tripletes);
 } // namespace SIBSplines

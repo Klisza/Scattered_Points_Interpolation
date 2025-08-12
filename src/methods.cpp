@@ -485,7 +485,7 @@ int return_closest_knot_index_to_param(std::vector<double> UV, double param)
     return index - 1;
 }
 
-int parameterLocation(bool Udirection, int pos, Bsurface surface)
+int parameterLocation(bool Udirection, int pos, const Bsurface &surface)
 {
     if (Udirection)
     {
@@ -498,7 +498,7 @@ int parameterLocation(bool Udirection, int pos, Bsurface surface)
 }
 
 // Gives you the varaible depending on U or V direction, variable type (control point or parameter)
-int variableMap(bool Udirection, bool ParOrCp, int pos, int pos2, int xyz, Bsurface surface)
+int variableMap(bool Udirection, bool ParOrCp, int pos, int pos2, int xyz, const Bsurface &surface)
 {
 
     int result;
@@ -512,6 +512,31 @@ int variableMap(bool Udirection, bool ParOrCp, int pos, int pos2, int xyz, Bsurf
         result = u * surface.cpCols + v + xyz * surface.cpSize;
     }
     return result;
+}
+
+Eigen::SparseMatrix<double> make_block_diagonal(const Eigen::SparseMatrix<double> &A,
+                                                const Bsurface &surface)
+{
+    int n = A.rows();
+    int m = A.cols();
+    int parSize = surface.paramSize;
+    Eigen::SparseMatrix<double> B(3 * n + 2 * parSize, 3 * m + 2 * parSize);
+    std::vector<Eigen::Triplet<double>> triplets;
+    for (int k = 0; k < A.outerSize(); ++k)
+    {
+        for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it)
+        {
+            for (int i = 0; i < 3; ++i)
+            {
+                int row = i * n + it.row();
+                int col = i * m + it.col();
+                triplets.emplace_back(row, col, it.value());
+            }
+        }
+    }
+
+    B.setFromTriplets(triplets.begin(), triplets.end());
+    return B;
 }
 
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
@@ -590,7 +615,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
     // Solve for the variables (parameters and control points) using the knot vectors.
     auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
-    // Fitting energy
+    // ##### Fitting energy ######
     // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
     // For degree 3 = 50 variables
     func.add_elements<50>(
@@ -650,7 +675,15 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
         });
 
-    // Fairing energy manual
+    // ##### Fairing energy #####
+    int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
+    std::vector<Trip> tripletes;
+    energy_part_of_surface_least_square(surface, basis,
+                                        tripletes); // the fairness energy left part
+    SparseMatrixXd matE, matEx30, matA;
+    matE.resize(psize, psize);
+    matE.setFromTriplets(tripletes.begin(), tripletes.end());
+    matEx30 = make_block_diagonal(matE, surface);
 
     // solve for n iterations.
     Eigen::VectorXd x = list_to_vec(surface.globVars); // put your variables into a list x
@@ -658,7 +691,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
     std::cout << "check 4\n";
-    /*for (int i = 0; i < target_steps; ++i)
+    for (int i = 0; i < target_steps; ++i)
     {
         auto [f, g, H_proj] =
             func.eval_with_hessian_proj(x); // compute Hessian and gradient of the fitting error
@@ -682,22 +715,22 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         // modify the direction vector. 2 options: 1. rescale (backtrace) the whole vector d to keep
         // the parameters staying in their regions, or 2. only re-scale the parameters that may
         // exceed their regions.
-        // d = s.stepBackTracer(varLevel, d, parSeparation, knotSeparation);
+        d = s.stepBackTracer(varLevel, d, parSeparation, knotSeparation);
 
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
         x = TinyAD::line_search(x, d, f, g, func);
 
-        if ((x - list_to_vec(s.globVars)).norm() <
+        if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
         {
             std::cout << "break because the line searched step is too small: "
-                      << (x - list_to_vec(s.globVars)).norm() << "\n";
+                      << (x - list_to_vec(surface.globVars)).norm() << "\n";
             break;
         }
         std::cout << "the dx, " << d.norm() << ", the backtraced dx "
-                  << (x - list_to_vec(s.globVars)).norm() << "\n";
-    }*/
+                  << (x - list_to_vec(surface.globVars)).norm() << "\n";
+    }
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
