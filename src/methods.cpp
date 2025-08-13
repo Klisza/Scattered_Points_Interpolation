@@ -478,7 +478,8 @@ void rescale_param(Eigen::MatrixXd &param)
 }
 
 // Perform a binary search to find the lower bound of the knot vector that fits the parameter.
-int return_closest_knot_index_to_param(std::vector<double> UV, double param)
+// Return the knot vector index
+int return_closest_knot_index_to_param(const std::vector<double> &UV, double param)
 {
     int index;
     auto it = std::lower_bound(UV.begin(), UV.end(), param);
@@ -543,28 +544,77 @@ Eigen::SparseMatrix<double> make_block_diagonal(const Eigen::SparseMatrix<double
     B.setFromTriplets(triplets.begin(), triplets.end());
     return B;
 }
-
+// Generates the gradient and hessian for the fairing energy
 std::tuple<double, Eigen::VectorXd, SparseMatrixXd> calculate_fairing_energy(Bsurface &surface,
                                                                              PartialBasis &basis)
 {
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
     std::vector<Trip> tripletes;
-    energy_part_of_surface_least_square(surface, basis,
-                                        tripletes); // the fairness energy left part
+    energy_part_of_surface_least_square(surface, basis, tripletes);
     SparseMatrixXd matE, matEx30, hessE;
     Eigen::VectorXd gradE;
     matE.resize(psize, psize);
     matE.setFromTriplets(tripletes.begin(), tripletes.end());
-    // Basicly out hessian
+    // thin plate energy hessian
     matEx30 = make_block_diagonal(matE, surface);
-    Eigen::VectorXd x = list_to_vec(surface.globVars); // put your variables into a list x
+    Eigen::VectorXd x = list_to_vec(surface.globVars);
     hessE = matEx30;
     gradE = hessE * x;
     double f = 0.5 * x.dot(hessE * x);
     return std::tuple<double, Eigen::VectorXd, SparseMatrixXd>(f, gradE, hessE);
 }
+// Calculates the backtracking alpha rescaling
+double calculate_alpha(Eigen::VectorXd &d, Eigen::VectorXd x, int i, double upper, double lower)
+{
+    double alpha;
+    double epsilon = 1e-3;
+    double updateVar = d(i) + x(i);
+    if (updateVar >= upper)
+    {
+        alpha = (upper - x(i)) / d(i);
+        alpha -= epsilon;
+    }
+    else if (updateVar < lower)
+    {
+        alpha = (lower - x(i)) / d(i);
+    }
+    else
+    {
+        return 1;
+    }
+    return alpha;
+}
+// Scale the direction vector d so that every parameter + direction stays in between two knots
+// determined prior.
+Eigen::VectorXd stepBacktracker(Eigen::VectorXd &d, std::vector<std::array<int, 2>> paraInInterval,
+                                Bsurface &surface)
+{
+    Eigen::VectorXd x = list_to_vec(surface.globVars);
+    // U parameters
+    for (int i = surface.cpSize * 3; i < surface.paramSize; ++i)
+    {
+        // Get the lower and upper bounds for the current parameter
+        double upper = surface.U[paraInInterval[i][0]];
+        double lower = surface.U[paraInInterval[i][0] + 1];
+        double alpha = calculate_alpha(d, x, i, upper, lower);
+        d(i) = alpha * d(i);
+    }
+    // V parameters
+    for (int i = surface.cpSize * 3 + surface.paramSize; i < surface.paramSize; ++i)
+    {
+        // Get the lower and upper bounds for the current parameter
+        double upper = surface.V[paraInInterval[i][1]];
+        double lower = surface.V[paraInInterval[i][1] + 1];
+        double alpha = calculate_alpha(d, x, i, upper, lower);
+        d(i) = alpha * d(i);
+    }
+    return d;
+}
 
-Eigen::VectorXd stepBackTracer(Eigen::VectorXd &d) {}
+Eigen::VectorXd line_search(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total,
+                            Eigen::VectorXd g_total)
+{
+}
 
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
 {
@@ -702,14 +752,10 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
         });
 
-    // ##### Fairing energy #####
-
-    // solve for n iterations.
-
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    double w_fit = 0.5;
-    double w_fair = 1 - w_fit;
+    double w_fair = 1e-3;
+    double w_fit = 1 - w_fair;
     std::cout << "check 4\n";
     for (int i = 0; i < target_steps; ++i)
     {
@@ -739,14 +785,12 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
             break;
-        // modify the direction vector. 2 options: 1. rescale (backtrace) the whole vector d to keep
-        // the parameters staying in their regions, or 2. only re-scale the parameters that may
-        // exceed their regions.
-        d = stepBackTracer(varLevel, d, parSeparation, knotSeparation);
+
+        d = stepBacktracker(d, paraInInterval, surface);
 
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
-        // x = TinyAD::line_search(x, d, f, g, func);
+        x = line_search(x, d, f_total, g_total);
 
         if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
