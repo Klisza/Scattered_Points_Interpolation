@@ -97,7 +97,12 @@ void write_svg_pts(const std::string &file, const Eigen::MatrixXd &param)
 
 Eigen::VectorXd list_to_vec(std::vector<double> &vars)
 {
-    Eigen::VectorXd result;
+    const Eigen::Index n = static_cast<Eigen::Index>(vars.size());
+    Eigen::VectorXd result(n);
+    for (Eigen::Index i = 0; i < n; ++i)
+    {
+        result[i] = vars[i];
+    }
     return result;
 }
 
@@ -539,6 +544,28 @@ Eigen::SparseMatrix<double> make_block_diagonal(const Eigen::SparseMatrix<double
     return B;
 }
 
+std::tuple<double, Eigen::VectorXd, SparseMatrixXd> calculate_fairing_energy(Bsurface &surface,
+                                                                             PartialBasis &basis)
+{
+    int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
+    std::vector<Trip> tripletes;
+    energy_part_of_surface_least_square(surface, basis,
+                                        tripletes); // the fairness energy left part
+    SparseMatrixXd matE, matEx30, hessE;
+    Eigen::VectorXd gradE;
+    matE.resize(psize, psize);
+    matE.setFromTriplets(tripletes.begin(), tripletes.end());
+    // Basicly out hessian
+    matEx30 = make_block_diagonal(matE, surface);
+    Eigen::VectorXd x = list_to_vec(surface.globVars); // put your variables into a list x
+    hessE = matEx30;
+    gradE = hessE * x;
+    double f = 0.5 * x.dot(hessE * x);
+    return std::tuple<double, Eigen::VectorXd, SparseMatrixXd>(f, gradE, hessE);
+}
+
+Eigen::VectorXd stepBackTracer(Eigen::VectorXd &d) {}
+
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
 {
     double precision = 0;
@@ -676,50 +703,50 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         });
 
     // ##### Fairing energy #####
-    int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
-    std::vector<Trip> tripletes;
-    energy_part_of_surface_least_square(surface, basis,
-                                        tripletes); // the fairness energy left part
-    SparseMatrixXd matE, matEx30, matA;
-    matE.resize(psize, psize);
-    matE.setFromTriplets(tripletes.begin(), tripletes.end());
-    matEx30 = make_block_diagonal(matE, surface);
 
     // solve for n iterations.
-    Eigen::VectorXd x = list_to_vec(surface.globVars); // put your variables into a list x
 
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
+    double w_fit = 0.5;
+    double w_fair = 1 - w_fit;
     std::cout << "check 4\n";
     for (int i = 0; i < target_steps; ++i)
     {
-        auto [f, g, H_proj] =
-            func.eval_with_hessian_proj(x); // compute Hessian and gradient of the fitting error
-        TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f);
+        Eigen::VectorXd x = list_to_vec(surface.globVars);
+
+        auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(
+            x); // compute Hessian and gradient of the fitting error/energy
+        auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis);
+        Eigen::VectorXd g_total = w_fit * g_fit + w_fair * g_fair;
+        SparseMatrixXd H_total = H_fit_proj;
+        H_total *= w_fit;
+        H_total += w_fair * H_fair;
+        double f_total = w_fit * f_fit + w_fair * f_fair;
+
+        TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
         double ferror;
         // s.evaluateFittingError(ferror, false); // compute the fitting error and print it out.
         std::cout << "sum of squared error " << ferror << "\n";
-        // BW: assemble the fitting Hessian, fitting gradient and fairness Hessian, fairness
-        // gradient together, blend them with their corresponding weights.
-        Eigen::VectorXd d = TinyAD::newton_direction(g, H_proj, solver);
+        Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
         // the following variable "sparsity_pattern_dirty" can use the default value "false", since
         // our sparse matrices are all in the same structure. Thus we comment the following command
         // out.
         // solver.sparsity_pattern_dirty =
         //     true; // this is crutial, since the patterns are always changing in each iteration!
 
-        if (TinyAD::newton_decrement(d, g) <
+        if (TinyAD::newton_decrement(d, g_total) <
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
             break;
         // modify the direction vector. 2 options: 1. rescale (backtrace) the whole vector d to keep
         // the parameters staying in their regions, or 2. only re-scale the parameters that may
         // exceed their regions.
-        d = s.stepBackTracer(varLevel, d, parSeparation, knotSeparation);
+        d = stepBackTracer(varLevel, d, parSeparation, knotSeparation);
 
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
-        x = TinyAD::line_search(x, d, f, g, func);
+        // x = TinyAD::line_search(x, d, f, g, func);
 
         if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
@@ -734,27 +761,22 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
-    if (1)
-    {
-        Eigen::MatrixXd SPs;
-        Eigen::MatrixXi SFs;
-        int visual_nbr =
-            200; // the discretization scale for the output surface. The mesh will be 200x200
-        surface.surface_visulization(surface, visual_nbr, SPs, SFs);
+    Eigen::MatrixXd SPs;
+    Eigen::MatrixXi SFs;
+    int visual_nbr =
+        200; // the discretization scale for the output surface. The mesh will be 200x200
+    surface.surface_visulization(surface, visual_nbr, SPs, SFs);
 
-        precision = surface.max_interpolation_err(ver, param, surface);
-        std::cout << "maximal interpolation error "
-                  << surface.max_interpolation_err(ver, param, surface) << std::endl;
-        write_points(meshfile + "pts" + std::to_string(param_nbr) + ".obj", ver);
-        write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", SPs,
-                            SFs);
-        Eigen::MatrixXd verticies;
-        Eigen::MatrixXi faces;
-        igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", verticies,
-                     faces);
-        polyscope::SurfaceMesh *psSurfaceMesh =
-            polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
-    }
+    precision = surface.max_interpolation_err(ver, param, surface);
+    std::cout << "maximal interpolation error "
+              << surface.max_interpolation_err(ver, param, surface) << std::endl;
+    write_points(meshfile + "pts" + std::to_string(param_nbr) + ".obj", ver);
+    write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", SPs, SFs);
+    Eigen::MatrixXd verticies;
+    Eigen::MatrixXi faces;
+    igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", verticies, faces);
+    polyscope::SurfaceMesh *psSurfaceMesh =
+        polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
 }
 
 // Optimized for all the variables using TinyAD as a autodifferenciation.
