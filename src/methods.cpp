@@ -611,9 +611,32 @@ Eigen::VectorXd stepBacktracker(Eigen::VectorXd &d, std::vector<std::array<int, 
     return d;
 }
 
+bool armijo(double f_old, double f_new, double alpha, Eigen::VectorXd d, Eigen::VectorXd g_total,
+            double armijo_const)
+{
+    return f_new <= f_old + armijo_const * alpha * d.dot(g_total);
+}
+
 Eigen::VectorXd line_search(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total,
                             Eigen::VectorXd g_total)
 {
+    int max_iters = 64;
+    double armijo_const = 1e-4;
+    double alpha = 1.0;
+    double shrink = 0.8;
+    double f_old = x.dot(g_total);
+    const double try_one = 1.0;
+    Eigen::VectorXd x_new;
+    for (int i = 0; i < max_iters; ++i)
+    {
+        x_new = x + alpha * d;
+        double f_new = x_new.dot(g_total);
+        TINYAD_ASSERT_EQ(f_new, f_new);
+        if (armijo(f_old, f_new, alpha, d, g_total, armijo_const))
+            return x_new;
+        else
+            alpha *= shrink;
+    }
 }
 
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps)
@@ -760,9 +783,8 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     for (int i = 0; i < target_steps; ++i)
     {
         Eigen::VectorXd x = list_to_vec(surface.globVars);
-
-        auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(
-            x); // compute Hessian and gradient of the fitting error/energy
+        // compute Hessian and gradient of the fitting error/energy
+        auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
         auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis);
         Eigen::VectorXd g_total = w_fit * g_fit + w_fair * g_fair;
         SparseMatrixXd H_total = H_fit_proj;
@@ -791,9 +813,8 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
         x = line_search(x, d, f_total, g_total);
-
-        if ((x - list_to_vec(surface.globVars)).norm() <
-            convergence_eps) // if the step is too small, break
+        TinyAD::line_search if ((x - list_to_vec(surface.globVars)).norm() <
+                                convergence_eps) // if the step is too small, break
         {
             std::cout << "break because the line searched step is too small: "
                       << (x - list_to_vec(surface.globVars)).norm() << "\n";
