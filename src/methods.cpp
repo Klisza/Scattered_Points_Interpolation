@@ -813,8 +813,8 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
         x = line_search(x, d, f_total, g_total);
-        TinyAD::line_search if ((x - list_to_vec(surface.globVars)).norm() <
-                                convergence_eps) // if the step is too small, break
+        if ((x - list_to_vec(surface.globVars)).norm() <
+            convergence_eps) // if the step is too small, break
         {
             std::cout << "break because the line searched step is too small: "
                       << (x - list_to_vec(surface.globVars)).norm() << "\n";
