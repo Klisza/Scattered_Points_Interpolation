@@ -1069,7 +1069,7 @@ Eigen::MatrixXd eqality_part_of_surface_least_square(Bsurface &surface,
 }
 // this function generate ld and ru.
 
-void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::MatrixXd &paras,
+/*void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::MatrixXd &paras,
                                           int shifti, int shiftj, std::vector<Trip> &tripletes)
 {
     int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
@@ -1079,7 +1079,7 @@ void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::Matrix
     std::vector<double> V = surface.V;
     for (int i = 0; i < paras.rows(); i++)
     {
-        for (int j = 0; j < psize + 1; j++)
+        for (int j = 0; j < psize; j++)
         {
             // figure out the jth control point corresponding to which Pij
             int coff_i = j / (surface.nv() + 1);
@@ -1092,6 +1092,49 @@ void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::Matrix
             double value = N1 * N2;
             tripletes.push_back(Trip(i + shifti, j + shiftj, value));
             tripletes.push_back(Trip(j + shiftj, i + shifti, value));
+        }
+    }
+    return;
+}*/
+void eqality_part_of_surface_least_square(Bsurface &surface, const Eigen::MatrixXd &paras,
+                                          int shifti, int shiftj, std::vector<Trip> &tripletes)
+{
+    int psize = (surface.nu() + 1) * (surface.nv() + 1); // total number of control points.
+    // Eigen::MatrixXd result(paras.rows(), psize);
+    int degree1 = surface.degree1;
+    int degree2 = surface.degree2;
+    std::vector<double> U = surface.U;
+    std::vector<double> V = surface.V;
+    for (int i = 0; i < paras.rows(); i++)
+    {
+        double u = paras(i, 0);
+        double v = paras(i, 1);
+        int uItv = intervalLocator(U, degree1, u);
+        int vItv = intervalLocator(V, degree2, v);
+        for (int j = 0; j < psize; j++)
+        {
+            // figure out the jth control point corresponding to which Pij
+            int coff_i = j / (surface.nv() + 1);
+            int coff_j = j - coff_i * (surface.nv() + 1);
+            // the corresponding cofficient should be N_coffi(u) and N_coffj(v)
+            // coffi is from uItv-degree1,...uItv, and coffj is from vItv-degree2,...,vItv
+            if (coff_i < uItv - degree1 || coff_i > uItv || coff_j < vItv - degree2 ||
+                coff_j > vItv)
+            {
+                continue;
+            }
+            double N1 = Nip(coff_i, degree1, u, U);
+            double N2 = Nip(coff_j, degree2, v, V);
+            double value = N1 * N2;
+            if (shifti != 0 || shiftj != 0)
+            {
+                tripletes.push_back(Trip(i + shifti, j + shiftj, value));
+                tripletes.push_back(Trip(j + shiftj, i + shifti, value));
+            }
+            else
+            {
+                tripletes.push_back(Trip(i, j, value));
+            }
         }
     }
     return;
@@ -1147,6 +1190,7 @@ void surface_least_square_lambda_multiplier_left_part(Bsurface &surface,
     energy_part_of_surface_least_square(surface, basis, tripletes);
     std::cout << "finished energy part\n";
     int shifti = psize, shiftj = 0;
+    std::cout << "We crash here" << std::endl;
     eqality_part_of_surface_least_square(surface, paras, shifti, shiftj, tripletes);
     std::cout << "finished equality part\n";
 

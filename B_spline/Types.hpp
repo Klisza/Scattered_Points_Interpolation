@@ -316,4 +316,6 @@ std::vector<double> fix_knot_vector_to_interpolate_curve_WKW(const int degree,
 std::vector<double> basisValues(const int whichItv, const int degree,
                                 const std::vector<std::vector<std::vector<double>>> &basis,
                                 const double param);
+int intervalLocator(const std::vector<double> &U, const int p, double &uvalue);
+
 } // namespace SIBSplines

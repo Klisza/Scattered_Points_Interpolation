@@ -106,6 +106,16 @@ Eigen::VectorXd list_to_vec(std::vector<double> &vars)
     return result;
 }
 
+std::vector<double> vec_to_list(Eigen::VectorXd globVar)
+{
+    std::vector<double> list(static_cast<std::size_t>(globVar.size()));
+    for (Eigen::Index i = 0; i < globVar.size(); ++i)
+    {
+        list[static_cast<std::size_t>(i)] = globVar(i); // or eig[i]
+    }
+    return list;
+}
+
 void write_svg_knot_vectors(const std::string &file, const std::vector<double> &U,
                             const std::vector<double> &V)
 {
@@ -611,14 +621,29 @@ Eigen::VectorXd stepBacktracker(Eigen::VectorXd &d, std::vector<std::array<int, 
     return d;
 }
 
+template <typename PassiveT>
+double eval_energy(Eigen::VectorXd x_new, Bsurface &surface, PartialBasis &basis, PassiveT func)
+{
+    Bsurface new_surface = surface;
+    PartialBasis new_basis(new_surface);
+    double w_fair = 1e-3;
+    double w_fit = 1 - w_fair;
+    new_surface.globVars = vec_to_list(x_new);
+    auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x_new);
+    auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(new_surface, new_basis);
+    return w_fair * f_fair + w_fit * f_fit;
+}
+
 bool armijo(double f_old, double f_new, double alpha, Eigen::VectorXd d, Eigen::VectorXd g_total,
             double armijo_const)
 {
     return f_new <= f_old + armijo_const * alpha * d.dot(g_total);
 }
 
+template <typename PassiveT>
 Eigen::VectorXd line_search(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total,
-                            Eigen::VectorXd g_total)
+                            Eigen::VectorXd g_total, Bsurface &surface, PartialBasis &basis,
+                            PassiveT func)
 {
     int max_iters = 64;
     double armijo_const = 1e-4;
@@ -630,8 +655,8 @@ Eigen::VectorXd line_search(Eigen::VectorXd x, Eigen::VectorXd d, double &f_tota
     for (int i = 0; i < max_iters; ++i)
     {
         x_new = x + alpha * d;
-        double f_new = x_new.dot(g_total);
-        TINYAD_ASSERT_EQ(f_new, f_new);
+        double f_new = eval_energy(x_new, surface, basis, func);
+        // TINYAD_ASSERT_EQ(f_new, f_new);
         if (armijo(f_old, f_new, alpha, d, g_total, armijo_const))
             return x_new;
         else
@@ -653,7 +678,6 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
     // construct the surface object
     Bsurface surface;
-
     // set up the initial parameters.
     int param_nbr = param.rows();           // the number of data points
     surface.degree1 = 3;                    // degree of u direction
@@ -670,12 +694,14 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
     // Solve the control points as initialization.
     PartialBasis basis(surface);
+    std::cout << "Generating control points" << std::endl;
     surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
     std::cout << "Control points initialized" << std::endl;
 
     // Init parameter intervals for reparameterization
     std::vector<std::array<int, 2>> paraInInterval(param_nbr, {0, 0});
     // Perform binary search and return the element
+    std::cout << "Init parameter interval" << std::endl;
     for (int i = 0; i < paraInInterval.size() - 1; i++)
     {
         paraInInterval[i][0] = return_closest_knot_index_to_param(surface.U, param(i, 0));
@@ -690,30 +716,35 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
     int varSize = 2 * param_nbr + 3 * surface.cpSize;
     // Init globVars vector
-    surface.cpCols = surface.control_points.size();
-    surface.cpRows = surface.control_points[0].size();
-    // Add control points to globVars
-    // Put the grid structure into a vector (i,j) directions same as (u,v) -> variableMap
-    for (int k = 0; k < 3; k++)
+    surface.cpRows = surface.control_points.size();
+    surface.cpCols = surface.cpRows ? surface.control_points[0].size() : 0;
+
+    surface.cpSize = surface.cpRows * surface.cpCols;
+
+    std::cout << "Setting the control points to globVars" << std::endl;
+    for (int k = 0; k < 3; ++k)
     {
-        for (int i = 0; i < surface.cpRows; i++)
+        for (int i = 0; i < surface.cpRows; ++i)
         {
-            for (int j = 0; j < surface.cpCols; j++)
+            for (int j = 0; j < surface.cpCols; ++j)
             {
-                surface.globVars[i * j + k * surface.cpSize] = surface.control_points[i][j](k);
+                int idx = i * surface.cpCols + j;
+                surface.globVars[k * surface.cpSize + idx] = surface.control_points[i][j](k);
             }
         }
     }
     // Add parameters to globVars
-    for (int k = 0; k < 2; k++)
+    std::cout << "Setting the parameters to globVars" << std::endl;
+    for (int k = 0; k < 2 && k < param.cols(); ++k)
     {
-        for (int i = 0; i < param.size(); i++)
+        for (int i = 0; i < param.rows(); ++i)
         {
-            surface.globVars[i + k * param.size() + 3 * surface.cpSize] = param(i, k);
+            surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
         }
     }
 
     // Solve for the variables (parameters and control points) using the knot vectors.
+    std::cout << "Starting with TinyAD" << std::endl;
     auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
     // ##### Fitting energy ######
     // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
@@ -774,12 +805,13 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                    (p01 - ver(dataID, 1)) * (p01 - ver(dataID, 1)) +
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
         });
-
+    std::cout << "Done with TinyAD" << std::endl;
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
     double w_fair = 1e-3;
     double w_fit = 1 - w_fair;
     std::cout << "check 4\n";
+    std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
     {
         Eigen::VectorXd x = list_to_vec(surface.globVars);
@@ -812,7 +844,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
-        x = line_search(x, d, f_total, g_total);
+        x = line_search(x, d, f_total, g_total, func);
         if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
         {
@@ -823,6 +855,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         std::cout << "the dx, " << d.norm() << ", the backtraced dx "
                   << (x - list_to_vec(surface.globVars)).norm() << "\n";
     }
+    std::cout << "Done with optimization" << std::endl;
     /* ///////////////////////
         Data Visualization
     //////////////////////// */

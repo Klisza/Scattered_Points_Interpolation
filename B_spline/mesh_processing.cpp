@@ -14,7 +14,6 @@
 #include <sparse_interp/curve.h>
 #include <sparse_interp/mesh_processing.h>
 
-
 namespace SIBSplines
 {
 typedef OpenMesh::PolyMesh_ArrayKernelT<> CGMesh;
@@ -1217,7 +1216,7 @@ Eigen::Vector3d edge_loop_intersectionPoint(const Eigen::Vector2d &p0, const Eig
             result = i3;
             found = true;
             ////////////// TODO the following "break" may cause problems, please check the logic
-            ///here if problem happens
+            /// here if problem happens
             break;
         }
     }
@@ -1800,5 +1799,28 @@ void write_csv(const std::string &file, const std::vector<double> data)
     }
     fout << data.back() << std::endl;
     fout.close();
+}
+
+int intervalLocator(const std::vector<double> &U, const int p, double &uvalue)
+{
+    int nu = U.size() - 2 - p;
+    int uint = nu + 1 - p; // nbr of u intervals
+    if (uvalue >= U.back())
+    {
+        uvalue = 1 - SCALAR_ZERO;
+        return uint - 1 + p;
+    }
+    if (uvalue <= U.front())
+    {
+        return p;
+    }
+    for (int i = 0; i < uint; i++)
+    {
+        if (U[i + p] <= uvalue && U[i + p + 1] > uvalue)
+        {
+            return i + p;
+        }
+    }
+    return -1;
 }
 } // namespace SIBSplines
