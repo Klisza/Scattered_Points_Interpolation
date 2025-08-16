@@ -1190,7 +1190,6 @@ void surface_least_square_lambda_multiplier_left_part(Bsurface &surface,
     energy_part_of_surface_least_square(surface, basis, tripletes);
     std::cout << "finished energy part\n";
     int shifti = psize, shiftj = 0;
-    std::cout << "We crash here" << std::endl;
     eqality_part_of_surface_least_square(surface, paras, shifti, shiftj, tripletes);
     std::cout << "finished equality part\n";
 

@@ -714,13 +714,14 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     surface.cpSize =
         (surface.U.size() - 1 - surface.degree1) * (surface.V.size() - 1 - surface.degree2);
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
-    int varSize = 2 * param_nbr + 3 * surface.cpSize;
+    const int varSize = 2 * param_nbr + 3 * surface.cpSize;
     // Init globVars vector
     surface.cpRows = surface.control_points.size();
     surface.cpCols = surface.cpRows ? surface.control_points[0].size() : 0;
 
     surface.cpSize = surface.cpRows * surface.cpCols;
-
+    // Adding control points to globVars
+    surface.globVars.resize(varSize);
     std::cout << "Setting the control points to globVars" << std::endl;
     for (int k = 0; k < 3; ++k)
     {
@@ -729,17 +730,9 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
             for (int j = 0; j < surface.cpCols; ++j)
             {
                 int idx = i * surface.cpCols + j;
+
                 surface.globVars[k * surface.cpSize + idx] = surface.control_points[i][j](k);
             }
-        }
-    }
-    // Add parameters to globVars
-    std::cout << "Setting the parameters to globVars" << std::endl;
-    for (int k = 0; k < 2 && k < param.cols(); ++k)
-    {
-        for (int i = 0; i < param.rows(); ++i)
-        {
-            surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
         }
     }
 
@@ -810,7 +803,6 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
     double w_fair = 1e-3;
     double w_fit = 1 - w_fair;
-    std::cout << "check 4\n";
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
     {
@@ -856,6 +848,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                   << (x - list_to_vec(surface.globVars)).norm() << "\n";
     }
     std::cout << "Done with optimization" << std::endl;
+    // TODO correctly configure surface
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
