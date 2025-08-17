@@ -691,7 +691,6 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                                                 surface.V, param, delta, per, target_steps,
                                                 enable_max_fix_nbr);
     std::cout << "knot vectors generated" << std::endl;
-
     // Solve the control points as initialization.
     PartialBasis basis(surface);
     std::cout << "Generating control points" << std::endl;
@@ -716,8 +715,8 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
     const int varSize = 2 * param_nbr + 3 * surface.cpSize;
     // Init globVars vector
-    surface.cpRows = surface.control_points.size();
-    surface.cpCols = surface.cpRows ? surface.control_points[0].size() : 0;
+    surface.cpRows = surface.control_points[0].size();
+    surface.cpCols = surface.control_points.size();
 
     surface.cpSize = surface.cpRows * surface.cpCols;
     // Adding control points to globVars
@@ -733,6 +732,14 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
                 surface.globVars[k * surface.cpSize + idx] = surface.control_points[i][j](k);
             }
+        }
+    }
+    std::cout << "Setting parameters to globVars" << std::endl;
+    for (int k = 0; k < 2; ++k)
+    {
+        for (int i = 0; param.rows(); ++i)
+        {
+            surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
         }
     }
 
