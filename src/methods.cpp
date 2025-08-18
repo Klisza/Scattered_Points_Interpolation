@@ -498,6 +498,7 @@ int return_closest_knot_index_to_param(const std::vector<double> &UV, double par
         std::cerr << "Error: No interval found for " << param << std::endl;
     }
     index = std::distance(std::begin(UV), it);
+    // return index - 1;
     return index - 1;
 }
 
@@ -522,10 +523,15 @@ int variableMap(bool Udirection, bool ParOrCp, int pos, int pos2, int xyz, const
     {
         result = parameterLocation(Udirection, pos, surface);
     }
+    // Control point location
     else
     {
+        /*std::cout << pos2 << std::endl;
         int u, v = pos, pos2;
-        result = u * surface.cpCols + v + xyz * surface.cpSize;
+        std::cout << "pos1, pos2: " << pos << ", " << pos2 << std::endl;
+        std::cout << "u, v: " << u << ", " << v << std::endl;
+        result = u * surface.control_points.size() + v + xyz * surface.cpSize;*/
+        result = pos * surface.control_points.size() + pos2 + xyz * surface.cpSize;
     }
     return result;
 }
@@ -724,22 +730,23 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     std::cout << "Setting the control points to globVars" << std::endl;
     for (int k = 0; k < 3; ++k)
     {
-        for (int i = 0; i < surface.cpRows; ++i)
+        for (int i = 0; i < surface.control_points.size(); ++i)
         {
-            for (int j = 0; j < surface.cpCols; ++j)
+            for (int j = 0; j < surface.control_points[i].size(); ++j)
             {
-                int idx = i * surface.cpCols + j;
+                // int idx = i * surface.cpCols + j;
 
-                surface.globVars[k * surface.cpSize + idx] = surface.control_points[i][j](k);
+                surface.globVars[k * surface.control_points.size() + i] =
+                    surface.control_points[i][j][k];
             }
         }
     }
     std::cout << "Setting parameters to globVars" << std::endl;
     for (int k = 0; k < 2; ++k)
     {
-        for (int i = 0; param.rows(); ++i)
+        for (int i = 0; i < param.cols(); ++i)
         {
-            surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
+            surface.globVars[3 * surface.cpSize + k * param.cols() + i] = param(i, k);
         }
     }
 
@@ -791,7 +798,9 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                                           surface); // getTheLocationOfThe(uItv-degree1+i,
                                                     // vItv-degree2+j)-th ControlPoint_z;
                     T pt0 = 0, pt1 = 0, pt2 = 0;
-                    // get the control point
+                    // std::cout << "lc0, lc1, lc2:" << lc0 << " " << lc1 << " " << lc2 <<
+                    // std::endl; std::cout << "Param nbr:" << param_nbr << std::endl;
+                    //  get the control point
                     pt0 = element.variables(lc0)(0, 0), pt1 = element.variables(lc1)(0, 0),
                     pt2 = element.variables(lc2)(0, 0);
 
@@ -813,9 +822,12 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
     {
+        std::cout << "1" << std::endl;
         Eigen::VectorXd x = list_to_vec(surface.globVars);
         // compute Hessian and gradient of the fitting error/energy
+        std::cout << "2" << std::endl;
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
+        std::cout << "3" << std::endl;
         auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis);
         Eigen::VectorXd g_total = w_fit * g_fit + w_fair * g_fair;
         SparseMatrixXd H_total = H_fit_proj;
@@ -827,6 +839,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         double ferror;
         // s.evaluateFittingError(ferror, false); // compute the fitting error and print it out.
         std::cout << "sum of squared error " << ferror << "\n";
+        std::cout << "4" << std::endl;
         Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
         // the following variable "sparsity_pattern_dirty" can use the default value "false", since
         // our sparse matrices are all in the same structure. Thus we comment the following command
@@ -838,11 +851,12 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
             break;
-
+        std::cout << "5" << std::endl;
         d = stepBacktracker(d, paraInInterval, surface);
 
         // BW: write your own line search code, since the line search in TinyAD will only consider
         // about your fitting energy. we need to implement one with considering both the energies.
+        std::cout << "6" << std::endl;
         x = line_search(x, d, f_total, g_total, func);
         if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
