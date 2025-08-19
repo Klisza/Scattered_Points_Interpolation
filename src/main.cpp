@@ -101,7 +101,7 @@ void interpCallback()
             if (ImGui::Button("Compute Function Interpolation"))
             {
                 run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per,
-                                  true);
+                                  true, user_delta, itSteps);
                 Eigen::MatrixXd verticies;
                 Eigen::MatrixXi faces;
                 std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
