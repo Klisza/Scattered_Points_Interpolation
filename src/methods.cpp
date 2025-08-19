@@ -569,6 +569,10 @@ std::tuple<double, Eigen::VectorXd, SparseMatrixXd> calculate_fairing_energy(Bsu
     Eigen::VectorXd x = list_to_vec(surface.globVars);
     hessE = matEx30;
     gradE = hessE * x;
+    Eigen::VectorXd X = x.segment(0, psize);
+    Eigen::VectorXd Y = x.segment(psize, psize);
+    Eigen::VectorXd Z = x.segment(2 * psize, psize);
+    std::cout << X.dot(matE * X) << Y.dot(matE * Y) << Z.dot(matE * Z) << std::endl;
     double f = 0.5 * x.dot(hessE * x);
     return std::tuple<double, Eigen::VectorXd, SparseMatrixXd>(f, gradE, hessE);
 }
@@ -837,7 +841,10 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
         // 3. globVars assignment is broken -> refactor checked
 
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
+        Eigen::VectorXd ones = Eigen::VectorXd::Ones(varSize);
 
+        SparseMatrixXd diag = 1e-6 * SparseMatrixXd(ones.asDiagonal());
+        H_fit_proj += diag;
         // Force H to ColMajor (cheap if it's already ColMajor).
         SparseMatrixXd H = H_fit_proj;
 
@@ -866,7 +873,7 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
         std::cout << "4" << std::endl;
         // Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
         //  solver.sparsity_pattern_dirty = true;
-        Eigen::VectorXd d = TinyAD::newton_direction(g_fit, H_fit_proj, solver);
+        Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
         // the following variable "sparsity_pattern_dirty" can use the default value "false",
         // since our sparse matrices are all in the same structure.Thus we comment the following
         // command out.solver.sparsity_pattern_dirty = true;
@@ -939,7 +946,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
 
     // mesh parametrization, and print out the parametrization result as a obj mesh.
     rescale_param(param);
-
+    std::cout << "parameters\n" << param << std::endl;
     // construct the surface object
     Bsurface surface;
     // set up the initial parameters.
@@ -954,6 +961,8 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U,
                                                 surface.V, param, delta, per, target_steps,
                                                 enable_max_fix_nbr);
+    std::cout << "Delta, per, target_steps:\n"
+              << delta << ", " << per << ", " << target_steps << std::endl;
     std::cout << "knot vectors generated" << std::endl;
     // Solve the control points as initialization.
     PartialBasis basis(surface);
@@ -987,6 +996,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     // Adding control points to globVars
     // Variable map is wrong
     surface.globVars.resize(varSize);
+    std::vector<bool> check1(surface.cpSize * 3, false);
     std::cout << "Setting the control points to globVars" << std::endl;
     for (int k = 0; k < 3; ++k)
     {
@@ -995,9 +1005,15 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
             for (int j = 0; j < surface.control_points[i].size(); ++j)
             {
                 // Index is k * cpSize + ith-cp
-                surface.globVars[k * (surface.cpSize - 1) +
-                                 i * (surface.control_points.size() - 1) + j] =
+                surface.globVars[k * surface.cpSize + i * (surface.control_points.size() - 1) + j] =
                     surface.control_points[i][j](k);
+                int currentID = k * surface.cpSize + i * (surface.control_points.size() - 1) + j;
+                if (check1[currentID])
+                {
+                    std::cout << "case 1";
+                    exit(0);
+                }
+                check1[currentID] = true;
             }
         }
     }
@@ -1081,7 +1097,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         });
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    double w_fair = 1e-3;
+    double w_fair = 1e-1;
     double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
@@ -1101,6 +1117,10 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
 
         // Force H to ColMajor (cheap if it's already ColMajor).
         SparseMatrixXd H = H_fit_proj;
+        Eigen::VectorXd ones = Eigen::VectorXd::Ones(varSize);
+
+        SparseMatrixXd diag = 1e-6 * SparseMatrixXd(ones.asDiagonal());
+        H_fit_proj += diag;
 
         assert(H.rows() == H.cols());
 
@@ -1113,7 +1133,9 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         std::cerr << "asymmetry ||H - H^T|| = " << asym << std::endl;
 
         std::cout << "3" << std::endl;
+
         auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis);
+        std::cout << "Fairness energy: " << f_fair << std::endl;
         Eigen::VectorXd g_total = w_fit * g_fit + w_fair * g_fair;
         SparseMatrixXd H_total = H_fit_proj;
         H_total *= w_fit;
@@ -1127,19 +1149,20 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         std::cout << "4" << std::endl;
         // Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
         //  solver.sparsity_pattern_dirty = true;
-        Eigen::VectorXd d = TinyAD::newton_direction(g_fit, H_fit_proj, solver);
+        Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
+        std::cout << "Default stepsize: " << d.norm() << std::endl;
         // the following variable "sparsity_pattern_dirty" can use the default value "false",
         // since our sparse matrices are all in the same structure.Thus we comment the following
         // command out.solver.sparsity_pattern_dirty = true;
         // this is crutial, since the patterns are always changing in eachiteration!
         std::cout << "5" << std::endl;
+        d = stepBacktracker(d, paraInInterval, surface);
+        std::cout << "Steptraced d: " << d.norm() << std::endl;
+        std::cout << "6" << std::endl;
         if (TinyAD::newton_decrement(d, g_total) <
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
             break;
-        std::cout << "6" << std::endl;
-        d = stepBacktracker(d, paraInInterval, surface);
-
         // BW: write your own line search code, since the line search in TinyAD will only
         // consider
         // about your fitting energy. we need to implement one with considering both the energies.
@@ -1169,11 +1192,11 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     precision = surface.max_interpolation_err(ver, param, surface);
     std::cout << "maximal interpolation error "
               << surface.max_interpolation_err(ver, param, surface) << std::endl;
-    write_points("pts" + std::to_string(param_nbr) + ".obj", ver);
-    write_triangle_mesh("_intp_p" + std::to_string(param_nbr) + ".obj", SPs, SFs);
+    write_points("pts_" + std::to_string(param_nbr) + ".obj", ver);
+    write_triangle_mesh("intp_p_" + std::to_string(param_nbr) + ".obj", SPs, SFs);
     Eigen::MatrixXd verticies;
     Eigen::MatrixXi faces;
-    igl::readOBJ("_intp_p" + std::to_string(param_nbr) + ".obj", verticies, faces);
+    igl::readOBJ("intp_p_" + std::to_string(param_nbr) + ".obj", verticies, faces);
     polyscope::SurfaceMesh *psSurfaceMesh =
         polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
 }
