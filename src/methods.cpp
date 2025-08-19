@@ -907,7 +907,6 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
         surface.globVars = vec_to_list(x);
     }
     std::cout << "Done with optimization" << std::endl;
-    // TODO correctly configure surface
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
@@ -1036,14 +1035,11 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         {
             using T = TINYAD_SCALAR_TYPE(element);
             Eigen::Index dataID = element.handle;
-            // Looking for mistakes
             T parameterU =
                 element.variables(variableMap(UDIR, PARAMETER, dataID, 0, 0, surface))(0, 0);
             T parameterV =
                 element.variables(variableMap(VDIR, PARAMETER, dataID, 0, 0, surface))(0, 0);
 
-            // *************************
-            // This part should be fine.
             // get the uv intervals [U[uItv], U[uItv+1])
             int uItv = paraInInterval[dataID][0];
             int vItv = paraInInterval[dataID][1];
@@ -1054,9 +1050,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
                 spb.computeBasisFunctionValues(parameterU, uItv, surface.degree1, surface.U);
             std::vector<T> basisV =
                 spb.computeBasisFunctionValues(parameterV, vItv, surface.degree2, surface.V);
-            // **********************************
 
-            // Looking for mistakes
             T p00 = 0, p01 = 0, p02 = 0;
             for (int i = 0; i < surface.degree1 + 1; i++)
             {
@@ -1086,14 +1080,13 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
                     p02 += pt2 * basisU[i] * basisV[j];
                 }
             }
-            // std::cout << "DataID: " << dataID << std::endl;
             return (p00 - ver(dataID, 0)) * (p00 - ver(dataID, 0)) +
                    (p01 - ver(dataID, 1)) * (p01 - ver(dataID, 1)) +
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
         });
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    double w_fair = 1e-1;
+    double w_fair = 1e-4;
     double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
