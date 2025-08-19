@@ -506,11 +506,11 @@ int parameterLocation(const bool Udirection, const int pos, const Bsurface &surf
 {
     if (Udirection)
     {
-        return surface.cpSize * 3 + pos;
+        return (surface.cpSize - 1) * 3 + pos;
     }
     else
     {
-        return surface.cpSize * 3 + pos + surface.paramSize;
+        return (surface.cpSize - 1) * 3 + pos + (surface.paramSize - 1);
     }
 }
 
@@ -681,7 +681,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
     // construct the surface object
     Bsurface surface;
     // set up the initial parameters.
-    int param_nbr = param.rows();           // the number of data points
+    const int param_nbr = param.rows();     // the number of data points
     surface.degree1 = 3;                    // degree of u direction
     surface.degree2 = 3;                    // degree of v direction
     surface.U = {{0, 0, 0, 0, 1, 1, 1, 1}}; // the initial U knot vector
@@ -723,6 +723,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
 
     surface.cpSize = surface.cpRows * surface.cpCols;
     // Adding control points to globVars
+    // Variable map is wrong
     surface.globVars.resize(varSize);
     std::cout << "Setting the control points to globVars" << std::endl;
     for (int k = 0; k < 3; ++k)
@@ -731,25 +732,27 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         {
             for (int j = 0; j < surface.control_points[i].size(); ++j)
             {
-                // int idx = i * surface.cpCols + j;
-
-                surface.globVars[k * surface.control_points.size() + i] =
-                    surface.control_points[i][j][k];
+                // Index is k * cpSize + ith-cp
+                surface.globVars[k * (surface.cpSize - 1) +
+                                 i * (surface.control_points.size() - 1) + j] =
+                    surface.control_points[i][j](k);
             }
         }
     }
     std::cout << "Setting parameters to globVars" << std::endl;
     for (int k = 0; k < 2; ++k)
     {
-        for (int i = 0; i < param.cols(); ++i)
+        for (int i = 0; i < param.rows(); ++i)
         {
-            surface.globVars[3 * surface.cpSize + k * param.cols() + i] = param(i, k);
+            surface.globVars[3 * (surface.cpSize - 1) + k * (param.rows() - 1) + i] = param(i, k);
         }
     }
 
     // Solve for the variables (parameters and control points) using the knot vectors.
     std::cout << "Starting with TinyAD" << std::endl;
+    std::cout << "Var size: " << varSize << std::endl;
     auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
+
     // ##### Fitting energy ######
     // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
     // For degree 3 = 50 variables
@@ -809,7 +812,7 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
                     p02 += pt2 * basisU[i] * basisV[j];
                 }
             }
-            std::cout << "DataID: " << dataID << std::endl;
+            // std::cout << "DataID: " << dataID << std::endl;
             return (p00 - ver(dataID, 0)) * (p00 - ver(dataID, 0)) +
                    (p01 - ver(dataID, 1)) * (p01 - ver(dataID, 1)) +
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
@@ -826,9 +829,12 @@ void mesh_interpolation(std::string meshfile, double delta, double per, int targ
         // compute Hessian and gradient of the fitting error/energy
         std::cout << "2" << std::endl;
         // 3 Possible scenarios:
-        // 1. Our method doesnt work
-        // 2. Variable map is broken -> refactor
-        // 3. globVars assignment is broken -> refactor
+        // For TinyAD solver we need a symmetric positve definite matrix to satisfy the LDLT
+        // conditon.
+        // 1. Our method doesnt work (not likely)
+        // 2. Variable map is broken -> refactor checked
+        // 3. globVars assignment is broken -> refactor checked
+
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
 
         // Force H to ColMajor (cheap if it's already ColMajor).
