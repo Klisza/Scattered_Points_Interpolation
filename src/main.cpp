@@ -21,9 +21,10 @@ double sphereSize = 0.002;
 bool enablePolyGUI = true;
 double user_per = 0.5;
 double user_delta = 0.4; // ours
-int itSteps = 10;        // default
+int itSteps = 50;        // default
 int modelType = 0;
 int nbr_of_pts = 100;
+double w_fair = 10e-6;
 std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
 
 using namespace SIBSplines;
@@ -81,7 +82,7 @@ void interpCallback()
         float f2 = static_cast<float>(user_per);
         ImGui::SliderFloat("Delta", &f2, 0, 1);
         user_per = static_cast<double>(f2);
-        ImGui::SliderInt("Iteration Steps", &itSteps, 1, 20);
+        ImGui::SliderInt("Iteration Steps", &itSteps, 1, 200);
         // Mesh calculation
         if (ImGui::Button("Interpolate Mesh"))
         {
@@ -96,12 +97,14 @@ void interpCallback()
         }
         if (ImGui::TreeNode("Predefined Functions"))
         {
+
             ImGui::SliderInt("Function Model", &modelType, 0, 5);
             ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
+            ImGui::InputDouble("Weight", &w_fair);
             if (ImGui::Button("Compute Function Interpolation"))
             {
                 run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per,
-                                  true, user_delta, itSteps);
+                                  true, user_delta, itSteps, w_fair);
                 // -------------------------------------------
                 // Read the mesh into polyscope
                 Eigen::MatrixXd verticies;

@@ -5,5 +5,5 @@ namespace SIBSplines
 void mesh_interpolation(std::string meshfile, double delta, double per, int target_steps);
 void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, const std::string path,
                        const std::string tail, const double per, const bool enable_local_energy,
-                       double delta, const int target_steps);
+                       double delta, const int target_steps, const double w_fair);
 } // namespace SIBSplines

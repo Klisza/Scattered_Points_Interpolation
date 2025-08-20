@@ -932,7 +932,7 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
 // Optimized for all the variables using TinyAD as a autodifferenciation.
 void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, const std::string path,
                        const std::string tail, const double per, const bool enable_local_energy,
-                       double delta, const int target_steps)
+                       double delta, const int target_steps, const double w_fair)
 {
     // Timer variables
     igl::Timer timer;
@@ -947,6 +947,10 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     Eigen::MatrixXd param;
     int method = model;
     bool corners = true;
+    // Try to write manual the sample parameter function to resemble the mesh processing as in the
+    // other function.
+    // SIBSplines::examples::input_parameters_get_model_sample_points(
+    //    ver, F, param, method); // Does not work as expected
     SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path);
 
     // mesh parametrization, and print out the parametrization result as a obj mesh.
@@ -970,6 +974,9 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     PartialBasis basis(surface);
     std::cout << "Generating control points" << std::endl;
     surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
+
+    polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
+        "Interpolated Surface (old alg)" + std::to_string(model), ver, F);
     std::cout << "Control points initialized" << std::endl;
 
     // Init parameter intervals for reparameterization
@@ -1086,7 +1093,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         });
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    const double w_fair = 1e-6;
+    // const double w_fair = 1e-6;
     const double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
@@ -1149,17 +1156,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     //////////////////////// */
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
-    std::vector<std::array<int, 2>> checkInterval(param_nbr, {0, 0});
-    for (int i = 0; i < checkInterval.size(); i++)
-    {
-        checkInterval[i][0] = return_closest_knot_index_to_param(surface.U, param(i, 0));
-        checkInterval[i][1] = return_closest_knot_index_to_param(surface.V, param(i, 1));
-    }
-    for (int i = 0; i < checkInterval.size(); ++i)
-    {
-        if (checkInterval[i] != paraInInterval[i])
-            exit(0);
-    }
+
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
     int visual_nbr =
@@ -1173,8 +1170,5 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
                             std::to_string(method) + tail + ".obj",
                         SPs, SFs);
-    // igl::write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
-    //                              std::to_string(method) + tail + ".obj",
-    //                          SPs, SFs);
 }
 } // namespace SIBSplines
