@@ -1086,7 +1086,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         });
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    double w_fair = 1e-4;
+    double w_fair = 1e-10;
     double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
@@ -1157,12 +1157,9 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     precision = surface.max_interpolation_err(ver, param, surface);
     std::cout << "maximal interpolation error "
               << surface.max_interpolation_err(ver, param, surface) << std::endl;
-    write_points("pts_" + std::to_string(param_nbr) + ".obj", ver);
-    write_triangle_mesh("intp_p_" + std::to_string(param_nbr) + ".obj", SPs, SFs);
-    Eigen::MatrixXd verticies;
-    Eigen::MatrixXi faces;
-    igl::readOBJ("intp_p_" + std::to_string(param_nbr) + ".obj", verticies, faces);
-    polyscope::SurfaceMesh *psSurfaceMesh =
-        polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
+    write_points(path + "pts" + std::to_string(nbr) + "_m_" + std::to_string(method) + ".obj", ver);
+    igl::write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
+                                 std::to_string(method) + tail + ".obj",
+                             SPs, SFs);
 }
 } // namespace SIBSplines

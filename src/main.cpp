@@ -102,6 +102,8 @@ void interpCallback()
             {
                 run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per,
                                   true, user_delta, itSteps);
+                // -------------------------------------------
+                // Read the mesh into polyscope
                 Eigen::MatrixXd verticies;
                 Eigen::MatrixXi faces;
                 std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
@@ -110,6 +112,8 @@ void interpCallback()
                 igl::readOBJ(model_filename, verticies, faces);
                 polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
                     "Interpolated Surface" + std::to_string(modelType), verticies, faces);
+                // -------------------------------------------
+                // Read the interpolated points into polyscope
                 std::string prefix_pts =
                     "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
                 std::string model_points = SI_MESH_DIR + prefix_pts;
@@ -118,6 +122,7 @@ void interpCallback()
                 igl::readOBJ(model_points, verticies_pts, faces_pts);
                 polyscope::PointCloud *psPointCloud = polyscope::registerPointCloud(
                     "Model" + std::to_string(modelType), verticies_pts);
+                // -------------------------------------------
             }
             ImGui::TreePop();
         }
