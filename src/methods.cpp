@@ -657,13 +657,13 @@ void reassign_parameters(const Bsurface &surface, Eigen::MatrixXd param, Eigen::
 }
 
 // Fairing energy doesnt consider the new control points -> needs a fix
-template <typename PassiveT>
+template <typename EvalFunctionT>
 double eval_energy(const Eigen::VectorXd &x_new, Bsurface &surface, PartialBasis &basis,
-                   PassiveT &func, const double w_fair)
+                   EvalFunctionT &func, const double w_fair, SparseMatrixXd &matE30)
 {
     double w_fit = 1 - w_fair;
-    auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x_new);
-    auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis, x_new);
+    auto f_fit = func(x_new);
+    double f_fair = x_new.dot(matE30 * x_new) / 2;
     return w_fair * f_fair + w_fit * f_fit;
 }
 
@@ -673,22 +673,22 @@ bool armijoCheck(const double f_old, const double f_new, const double alpha,
     return f_new <= f_old + armijo_const * alpha * d.dot(g_total);
 }
 
-template <typename PassiveT>
+template <typename EvalFunctionT>
 Eigen::VectorXd lineSearch(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total,
                            Eigen::VectorXd g_total, Bsurface &surface, PartialBasis &basis,
-                           PassiveT &func, const double w_fair)
+                           EvalFunctionT &func, const double w_fair, SparseMatrixXd &matE30)
 {
     int max_iters = 64;
     double armijo_const = 1e-4;
     double alpha = 1.0;
     double shrink = 0.8;
-    double f_old = g_total.dot(x);
+    double f_old = f_total;
     Eigen::VectorXd x_new;
     // Code crashes here.
     for (int i = 0; i < max_iters; ++i)
     {
         x_new = x + alpha * d;
-        double f_new = eval_energy(x_new, surface, basis, func, w_fair);
+        double f_new = eval_energy(x_new, surface, basis, func, w_fair, matE30);
         // TINYAD_ASSERT_EQ(f_new, f_new);
         if (armijoCheck(f_old, f_new, alpha, d, g_total, armijo_const))
         {
@@ -893,7 +893,7 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
         d = stepBacktracker(d, paraInInterval, surface);
 
         std::cout << "7" << std::endl;
-        x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair);
+        x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
 
         if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
@@ -1086,8 +1086,8 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         });
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    double w_fair = 1e-10;
-    double w_fit = 1 - w_fair;
+    const double w_fair = 1e-6;
+    const double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
     for (int i = 0; i < target_steps; ++i)
     {
@@ -1128,7 +1128,7 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
             break;
 
         std::cout << "7" << std::endl;
-        x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair);
+        x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
         if ((x - list_to_vec(surface.globVars)).norm() <
             convergence_eps) // if the step is too small, break
         {
@@ -1142,12 +1142,24 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         // Reassigning the variables for next iteration
         surface.globVars = vec_to_list(x);
     }
+
     std::cout << "Done with optimization" << std::endl;
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
+    std::vector<std::array<int, 2>> checkInterval(param_nbr, {0, 0});
+    for (int i = 0; i < checkInterval.size(); i++)
+    {
+        checkInterval[i][0] = return_closest_knot_index_to_param(surface.U, param(i, 0));
+        checkInterval[i][1] = return_closest_knot_index_to_param(surface.V, param(i, 1));
+    }
+    for (int i = 0; i < checkInterval.size(); ++i)
+    {
+        if (checkInterval[i] != paraInInterval[i])
+            exit(0);
+    }
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
     int visual_nbr =
@@ -1158,8 +1170,11 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     std::cout << "maximal interpolation error "
               << surface.max_interpolation_err(ver, param, surface) << std::endl;
     write_points(path + "pts" + std::to_string(nbr) + "_m_" + std::to_string(method) + ".obj", ver);
-    igl::write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
-                                 std::to_string(method) + tail + ".obj",
-                             SPs, SFs);
+    write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
+                            std::to_string(method) + tail + ".obj",
+                        SPs, SFs);
+    // igl::write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
+    //                              std::to_string(method) + tail + ".obj",
+    //                          SPs, SFs);
 }
 } // namespace SIBSplines
