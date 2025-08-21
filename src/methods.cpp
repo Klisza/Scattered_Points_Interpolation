@@ -502,6 +502,29 @@ int return_closest_knot_index_to_param(const std::vector<double> &UV, const doub
     return index - 1;
 }
 
+/*int intervalLocator(const std::vector<double> &U, const int p, double &uvalue)
+{
+    int nu = U.size() - 2 - p;
+    int uint = nu + 1 - p; // nbr of u intervals
+    if (uvalue >= U.back())
+    {
+        uvalue = 1 - SCALAR_ZERO;
+        return uint - 1 + p;
+    }
+    if (uvalue <= U.front())
+    {
+        return p;
+    }
+    for (int i = 0; i < uint; i++)
+    {
+        if (U[i + p] <= uvalue && U[i + p + 1] > uvalue)
+        {
+            return i + p;
+        }
+    }
+    return -1;
+}*/
+
 int parameterLocation(const bool Udirection, const int pos, const Bsurface &surface)
 {
     if (Udirection)
@@ -572,7 +595,7 @@ calculate_fairing_energy(Bsurface &surface, PartialBasis &basis, Eigen::VectorXd
     return std::tuple<double, Eigen::VectorXd, SparseMatrixXd>(f, gradE, hessE);
 }
 // Calculates the backtracking alpha rescaling
-double calculate_alpha(const Eigen::VectorXd &d, const Eigen::VectorXd x, const int i,
+double calculate_alpha(const Eigen::VectorXd &d, const Eigen::VectorXd &x, const int i,
                        const double upper, const double lower)
 {
     double alpha;
@@ -580,49 +603,76 @@ double calculate_alpha(const Eigen::VectorXd &d, const Eigen::VectorXd x, const 
     double updateVar = d(i) + x(i);
     if (updateVar >= upper)
     {
+        if (abs(d(i)) < 1e-6)
+            return 0;
         alpha = (upper - x(i)) / d(i);
-        alpha -= epsilon;
+        for (int i1 = 0; i1 < 64; i1++)
+        {
+            if (alpha * d(i) + x(i) < upper)
+            {
+                break;
+            }
+            alpha *= 0.9;
+        }
     }
     else if (updateVar < lower)
     {
+        if (abs(d(i)) < 1e-6)
+            return 0;
         alpha = (lower - x(i)) / d(i);
+        for (int i1 = 0; i1 < 64; i1++)
+        {
+            if (alpha * d(i) + x(i) >= lower)
+            {
+                break;
+            }
+            alpha *= 0.9;
+        }
     }
     else
     {
-        return 1;
+        return 1 - epsilon;
     }
-    return alpha;
+    double updateNew = d(i) * alpha + x(i);
+    if (updateNew < upper && updateNew >= lower)
+    {
+        return alpha * (1 - epsilon);
+    }
+    else
+        return 0;
 }
 // Scale the direction vector d so that every parameter + direction stays in between two knots
 // determined prior.
 // Should work correctly
 Eigen::VectorXd stepBacktracker(Eigen::VectorXd &d,
-                                const std::vector<std::array<int, 2>> paraInInterval,
+                                const std::vector<std::array<int, 2>> &paraInInterval,
                                 Bsurface &surface)
 {
     Eigen::VectorXd x = list_to_vec(surface.globVars);
     // U parameters
-    for (int i = surface.cpSize * 3; i < surface.paramSize; ++i)
+    for (int i = 0; i < surface.paramSize; ++i)
     {
         // Get the lower and upper bounds for the current parameter
-        double upper = surface.U[paraInInterval[i][0]];
-        double lower = surface.U[paraInInterval[i][0] + 1];
-        double alpha = calculate_alpha(d, x, i, upper, lower);
-        d(i) = alpha * d(i);
+        double upper = surface.U[paraInInterval[i][0] + 1];
+        double lower = surface.U[paraInInterval[i][0]];
+        double alpha = calculate_alpha(d, x, i + surface.cpSize * 3, upper, lower);
+        d(i + surface.cpSize * 3) = alpha * d(i + surface.cpSize * 3);
     }
     // V parameters
-    for (int i = surface.cpSize * 3 + surface.paramSize; i < surface.paramSize; ++i)
+    for (int i = 0; i < surface.paramSize; ++i)
     {
         // Get the lower and upper bounds for the current parameter
-        double upper = surface.V[paraInInterval[i][1]];
-        double lower = surface.V[paraInInterval[i][1] + 1];
-        double alpha = calculate_alpha(d, x, i, upper, lower);
-        d(i) = alpha * d(i);
+        double upper = surface.V[paraInInterval[i][1] + 1];
+        double lower = surface.V[paraInInterval[i][1]];
+        double alpha =
+            calculate_alpha(d, x, i + surface.cpSize * 3 + surface.paramSize, upper, lower);
+        d(i + surface.cpSize * 3 + surface.paramSize) =
+            alpha * d(i + surface.cpSize * 3 + surface.paramSize);
     }
     return d;
 }
 
-void reassign_control_points(Bsurface &surface, const Eigen::VectorXd x_new)
+void reassign_control_points(Bsurface &surface, const Eigen::VectorXd &x_new)
 {
     std::vector<double> globV = vec_to_list(x_new);
 
@@ -644,7 +694,50 @@ void reassign_control_points(Bsurface &surface, const Eigen::VectorXd x_new)
     }
 }
 
-void reassign_parameters(const Bsurface &surface, Eigen::MatrixXd param, Eigen::VectorXd x_new)
+void getBoundingBox(const Eigen::MatrixXd &V, Eigen::Vector3d &vmin, Eigen::Vector3d &vmax)
+{
+    double xmin = V(0, 0);
+    double xmax = V(0, 0);
+    double ymin = V(0, 1);
+    double ymax = V(0, 1);
+    double zmin = V(0, 2);
+    double zmax = V(0, 2);
+    for (int i = 0; i < V.rows(); i++)
+    {
+        double x = V(i, 0);
+        double y = V(i, 1);
+        double z = V(i, 2);
+        if (xmin > x)
+        {
+            xmin = x;
+        }
+        if (xmax < x)
+        {
+            xmax = x;
+        }
+        if (ymin > y)
+        {
+            ymin = y;
+        }
+        if (ymax < y)
+        {
+            ymax = y;
+        }
+        if (zmin > z)
+        {
+            zmin = z;
+        }
+        if (zmax < z)
+        {
+            zmax = z;
+        }
+    }
+    vmin = Eigen::Vector3d(xmin, ymin, zmin);
+    vmax = Eigen::Vector3d(xmax, ymax, zmax);
+}
+
+void reassign_parameters(const Bsurface &surface, Eigen::MatrixXd &param,
+                         const Eigen::VectorXd &x_new)
 {
     const int param_nbr = param.rows();
     for (int k = 0; k < 2; ++k)
@@ -714,7 +807,7 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
     // mesh parametrization, and print out the parametrization result as a obj mesh.
     mesh_parameterization(meshfile, ver, param, F);
     rescale_param(param);
-
+    std::cout << "Parameters: \n" << param << std::endl;
     // construct the surface object
     Bsurface surface;
     // set up the initial parameters.
@@ -742,8 +835,12 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
     std::cout << "Init parameter interval" << std::endl;
     for (int i = 0; i < paraInInterval.size(); i++)
     {
-        paraInInterval[i][0] = return_closest_knot_index_to_param(surface.U, param(i, 0));
-        paraInInterval[i][1] = return_closest_knot_index_to_param(surface.V, param(i, 1));
+        paraInInterval[i][0] = intervalLocator(
+            surface.U, surface.degree1,
+            param(i, 0)); // return_closest_knot_index_to_param(surface.U, param(i, 0));
+        paraInInterval[i][1] = intervalLocator(
+            surface.V, surface.degree2,
+            param(i, 1)); // return_closest_knot_index_to_param(surface.V, param(i, 1));
     }
     std::cout << "paraInterval size: " << paraInInterval.size() << std::endl;
 
@@ -930,9 +1027,9 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
 }
 
 // Optimized for all the variables using TinyAD as a autodifferenciation.
-void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, const std::string path,
+void run_old_algorithm(const int model, const int nbr_pts, const std::string path,
                        const std::string tail, const double per, const bool enable_local_energy,
-                       double delta, const int target_steps, const double w_fair)
+                       double &delta, const int target_steps, const double w_fair)
 {
     // Timer variables
     igl::Timer timer;
@@ -949,12 +1046,12 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     bool corners = true;
     // Try to write manual the sample parameter function to resemble the mesh processing as in the
     // other function.
-    // SIBSplines::examples::input_parameters_get_model_sample_points(
-    //    ver, F, param, method); // Does not work as expected
+    // SIBSplines::examples::input_parameters_get_model_sample_points(ver, F, param, method);
     SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path);
-
     // mesh parametrization, and print out the parametrization result as a obj mesh.
     rescale_param(param);
+    std::cout << "Parameters: \n" << param << std::endl;
+    Eigen::MatrixXd param_old = param;
     // construct the surface object
     Bsurface surface;
     // set up the initial parameters.
@@ -969,14 +1066,23 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U,
                                                 surface.V, param, delta, per, target_steps,
                                                 enable_max_fix_nbr);
+    write_svg_pts(path + "pts_before.svg", param);
     std::cout << "knot vectors generated" << std::endl;
     // Solve the control points as initialization.
     PartialBasis basis(surface);
     std::cout << "Generating control points" << std::endl;
     surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
-
+    Eigen::MatrixXd SPs_old;
+    Eigen::MatrixXi SFs_old;
+    Bsurface new_surface = surface;
+    surface.surface_visulization(new_surface, 200, SPs_old, SFs_old);
     polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
-        "Interpolated Surface (old alg)" + std::to_string(model), ver, F);
+        "Interpolated Surface (old alg)" + std::to_string(model), SPs_old, SFs_old);
+    write_points(path + "datapoints.obj", ver);
+    write_triangle_mesh(path + "mesh.obj", SPs_old, SFs_old);
+
+    polyscope::PointCloud *psPointCloud =
+        polyscope::registerPointCloud("Model_old" + std::to_string(model), ver);
     std::cout << "Control points initialized" << std::endl;
 
     // Init parameter intervals for reparameterization
@@ -985,8 +1091,26 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     std::cout << "Init parameter interval" << std::endl;
     for (int i = 0; i < paraInInterval.size(); i++)
     {
-        paraInInterval[i][0] = return_closest_knot_index_to_param(surface.U, param(i, 0));
-        paraInInterval[i][1] = return_closest_knot_index_to_param(surface.V, param(i, 1));
+        paraInInterval[i][0] = intervalLocator(
+            surface.U, surface.degree1,
+            param(i, 0)); // return_closest_knot_index_to_param(surface.U, param(i, 0));
+        paraInInterval[i][1] = intervalLocator(
+            surface.V, surface.degree2,
+            param(i, 1)); // return_closest_knot_index_to_param(surface.V, param(i, 1));
+    }
+    for (int i = 0; i < param.rows(); i++)
+    {
+        double u = param(i, 0);
+        double v = param(i, 1);
+        double ul = surface.U[paraInInterval[i][0]];
+        double ur = surface.U[paraInInterval[i][0] + 1];
+        double vl = surface.V[paraInInterval[i][1]];
+        double vr = surface.V[paraInInterval[i][1] + 1];
+        if (u < ul || u >= ur || v < vl || v >= vr)
+        {
+            std::cout << "error in intervals\n";
+            exit(0);
+        }
     }
     std::cout << "paraInterval size: " << paraInInterval.size() << std::endl;
 
@@ -1096,10 +1220,10 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
     // const double w_fair = 1e-6;
     const double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
-    for (int i = 0; i < target_steps; ++i)
+    Eigen::VectorXd x = list_to_vec(surface.globVars);
+    for (int i = 0; i < 0; ++i)
     {
         std::cout << "1" << std::endl;
-        Eigen::VectorXd x = list_to_vec(surface.globVars);
 
         std::cout << "2" << std::endl;
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
@@ -1115,7 +1239,8 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
         H_total += w_fair * H_fair;
         double f_total = w_fit * f_fit + w_fair * f_fair;
         TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
-
+        std::cout << "Fitting energy: " << f_fit << std::endl;
+        std::cout << "Fairing energy: " << f_fair << std::endl;
         std::cout << "4" << std::endl;
         //  solver.sparsity_pattern_dirty = true;
         Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
@@ -1135,40 +1260,233 @@ void run_old_algorithm(const int model, const int nbr_pts, double &per_ours, con
             break;
 
         std::cout << "7" << std::endl;
+        Eigen::VectorXd prev_x = x;
         x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
-        if ((x - list_to_vec(surface.globVars)).norm() <
-            convergence_eps) // if the step is too small, break
+        if ((x - prev_x).norm() < convergence_eps) // if the step is too small, break
         {
             std::cout << "break because the line searched step is too small: "
-                      << (x - list_to_vec(surface.globVars)).norm() << "\n";
+                      << (x - prev_x).norm() << "\n";
             break;
         }
-        std::cout << "the dx, " << d.norm() << ", the backtraced dx "
-                  << (x - list_to_vec(surface.globVars)).norm() << "\n";
+        std::cout << "the dx, " << d.norm() << ", the backtraced dx " << (x - prev_x).norm()
+                  << "\n";
         std::cout << "8" << std::endl;
         // Reassigning the variables for next iteration
-        surface.globVars = vec_to_list(x);
+        // surface.globVars = vec_to_list(x);
     }
 
     std::cout << "Done with optimization" << std::endl;
     /* ///////////////////////
         Data Visualization
     //////////////////////// */
+    surface.globVars = vec_to_list(x);
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
 
+    std::vector<std::array<int, 2>> checkInterval(param_nbr, {0, 0});
+
+    for (int i = 0; i < param_nbr; i++)
+    {
+        checkInterval[i][0] = intervalLocator(surface.U, surface.degree1,
+                                              x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)]);
+        checkInterval[i][1] = intervalLocator(surface.V, surface.degree2,
+                                              x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)]);
+        std::cout << "U,V: " << x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)] << " "
+                  << x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)] << std::endl;
+    }
+    Eigen::Vector3d vmin, vmax;
+    getBoundingBox(ver, vmin, vmax);
+    std::cout << "Bounding box: " << vmin.transpose() << " " << vmax.transpose() << std::endl;
+    for (int i = 0; i < checkInterval.size(); ++i)
+    {
+        if (checkInterval[i] != paraInInterval[i])
+        {
+            std::cout << "Intervals are not the same. Interavl index: " << i << " "
+                      << checkInterval[i][0] << " " << paraInInterval[i][0] << " "
+                      << checkInterval[i][1] << " " << paraInInterval[i][1] << std::endl;
+            std::cout << "u,v values: " << param(i, 0) << " " << param(i, 1) << std::endl;
+            std::cout << "u,v values from x: " << x(3 * surface.cpSize + i) << " "
+                      << x(3 * surface.cpSize + param_nbr + i) << std::endl;
+            std::cout << "Left and right boundaries of parameter i:"
+                      << surface.U[checkInterval[i][0]] << " " << surface.U[checkInterval[i][0] + 1]
+                      << " " << surface.U[paraInInterval[i][0]] << " "
+                      << surface.U[paraInInterval[i][0] + 1] << " "
+                      << surface.V[checkInterval[i][1]] << " " << surface.V[checkInterval[i][1] + 1]
+                      << " " << surface.V[paraInInterval[i][1]] << " "
+                      << surface.V[paraInInterval[i][1] + 1] << std::endl;
+            exit(0);
+        }
+    }
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
     int visual_nbr =
         200; // the discretization scale for the output surface. The mesh will be 200x200
     surface.surface_visulization(surface, visual_nbr, SPs, SFs);
-
+    std::cout << "Parameter update: " << (param - param_old).norm() << std::endl;
     precision = surface.max_interpolation_err(ver, param, surface);
     std::cout << "maximal interpolation error "
               << surface.max_interpolation_err(ver, param, surface) << std::endl;
     write_points(path + "pts" + std::to_string(nbr) + "_m_" + std::to_string(method) + ".obj", ver);
+    write_svg_pts(path + "pts.svg", param);
+    write_svg_knot_vectors(path + "knot_vectors.svg", surface.U, surface.V);
     write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
                             std::to_string(method) + tail + ".obj",
                         SPs, SFs);
+}
+void old(const int model, const int nbr_pts, double &per_ours, const std::string path,
+         const std::string tail, const double per, const bool enable_local_energy)
+{
+    // Timer variables
+    igl::Timer timer;
+    double time_knot = 0;
+    double time_solve = 0;
+    double precision = 0;
+
+    // Mesh variables / initialization
+    Eigen::MatrixXd ver;
+    int nbr = nbr_pts; // nbr of points
+    Eigen::MatrixXi F;
+    Eigen::MatrixXd param;
+    int method = model;
+    bool corners = true;
+    SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners,
+                                                  path); // Inits the mesh vars
+    // Vars = all control points * 2 + knots +
+    std::vector<double> vars;
+    auto func = TinyAD::scalar_function<2>(TinyAD::range(nbr));
+
+    // Splines vars init
+    int degree1 = 3;
+    int degree2 = 3;
+    std::vector<double> Uknot = {{0, 0, 0, 0, 1, 1, 1, 1}};
+    std::vector<double> Vknot = Uknot;
+    int perturb_itr = 0;
+    int target_steps = 10;
+    bool enable_max_fix_nbr = true;
+
+    timer.start();
+    std::cout << "before generating knot vectors" << std::endl;
+    std::cout << "data size " << ver.rows() << std::endl;
+
+    Bsurface surface;
+    surface.generate_interpolation_knot_vectors(degree1, degree2, Uknot, Vknot, param, per_ours,
+                                                per, target_steps, enable_max_fix_nbr);
+
+    timer.stop();
+    time_knot = timer.getElapsedTimeInSec();
+
+    Eigen::MatrixXd SPs;
+    Eigen::MatrixXi SFs;
+    if (1)
+    {
+        surface.degree1 = 3;
+        surface.degree2 = 3;
+        surface.U = Uknot;
+        surface.V = Vknot;
+        std::cout << "before initialize the basis " << std::endl;
+        PartialBasis basis(surface);
+        std::cout << "initialize the basis done" << std::endl;
+        std::cout << "before solving control points" << std::endl;
+        timer.start();
+        surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
+        timer.stop();
+        time_solve = timer.getElapsedTimeInSec();
+        surface.surface_visulization(surface, 100, SPs, SFs);
+        // Energy solving part
+        // if (enable_local_energy)
+        // {
+        //     double timeitr = 0;
+        //     for (int i = 0; i < 50; i++)
+        //     {
+        //         timer.start();
+        //         Eigen::MatrixXd energy, euu, evv, euv;
+        //         energy = surface.surface_energy_calculation(surface, basis, 1, euu, evv, euv);
+        //         bool uorv;
+        //         int which;
+        //         double max_energy;
+        //         surface.detect_max_energy_interval(surface, energy, euu, evv, uorv, which,
+        //                                            max_energy);
+        //         std::vector<double> Unew = surface.U;
+        //         std::vector<double> Vnew = surface.V;
+        //         if (!uorv)
+        //         { // u get updated
+        //             double value = (Unew[which] + Unew[which + 1]) / 2;
+        //             surface.U = knot_vector_insert_one_value(Unew, value);
+        //         }
+        //         else
+        //         {
+        //             double value = (Vnew[which] + Vnew[which + 1]) / 2;
+        //             surface.V = knot_vector_insert_one_value(Vnew, value);
+        //         }
+        //         std::cout << "knot vector get inserted" << std::endl;
+        //         basis.clear();
+        //         basis.init(surface);
+        //         surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
+        //         timer.stop();
+        //         timeitr += timer.getElapsedTimeInSec();
+        //         std::cout << " control points solved" << std::endl;
+        //         surface.surface_visulization(surface, 100, SPs, SFs);
+
+        //         igl::write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_refine_"
+        //         +
+        //                                      std::to_string(i) + "_m_" + std::to_string(method) +
+        //                                      tail + ".obj",
+        //                                  SPs, SFs);
+        //         std::vector<std::string> titles = {{"time_knot", "time_solve", "precision", "nu",
+        //                                             "nv", "cps", "time_itr", "max_energy"}};
+        //         int cps = (surface.nu() + 1) * (surface.nv() + 1);
+        //         precision = surface.max_interpolation_err(ver, param, surface);
+        //         std::vector<double> data = {{time_knot, time_solve, precision,
+        //         double(surface.nu()),
+        //                                      double(surface.nv()), double(cps), timeitr,
+        //                                      max_energy}};
+        //         write_csv(path + "ours_" + "p" + std::to_string(nbr) + "_refine_" +
+        //                       std::to_string(i) + "_m_" + std::to_string(method) + tail + ".csv",
+        //                   titles, data);
+        //     }
+        //   return;
+        //}
+    }
+
+    std::cout << "final U and V, " << surface.U.size() << " " << surface.V.size() << std::endl;
+    print_vector(surface.U);
+    print_vector(surface.V);
+    precision = surface.max_interpolation_err(ver, param, surface);
+    std::cout << "maximal interpolation error "
+              << surface.max_interpolation_err(ver, param, surface) << std::endl;
+    bool write_file = true;
+    if (write_file)
+    {
+        Eigen::MatrixXi Pf;
+        write_points(path + "pts" + std::to_string(nbr) + "_m_" + std::to_string(method) + ".obj",
+                     ver);
+        igl::write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
+                                     std::to_string(method) + tail + ".obj",
+                                 SPs, SFs);
+
+        std::vector<std::string> titles = {
+            {"time_knot", "time_solve", "precision", "nu", "nv", "cps", "time"}};
+        int cps = (surface.nu() + 1) * (surface.nv() + 1);
+        std::vector<double> data = {{time_knot, time_solve, precision, double(surface.nu()),
+                                     double(surface.nv()), double(cps), time_knot + time_solve}};
+        write_csv(path + "ours_" + "p" + std::to_string(nbr) + "_m_" + std::to_string(method) +
+                      tail + ".csv",
+                  titles, data);
+    }
+    output_timing();
+    if (1)
+    { // write svg files
+        write_svg_pts(path + "ours_" + "p" + std::to_string(nbr) + "_m_" + std::to_string(method) +
+                          tail + "param.svg",
+                      param);
+        write_svg_knot_vectors(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
+                                   std::to_string(method) + tail + "knots.svg",
+                               surface.U, surface.V);
+    }
+    std::cout << "total time " << time_knot + time_solve << std::endl;
+    polyscope::SurfaceMesh *psSurfaceMesh =
+        polyscope::registerSurfaceMesh("Interpolated Surface" + std::to_string(model), SPs, SFs);
+    polyscope::PointCloud *psPointCloud =
+        polyscope::registerPointCloud("Old Model" + std::to_string(model), SPs);
 }
 } // namespace SIBSplines

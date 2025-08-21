@@ -82,7 +82,7 @@ void interpCallback()
         float f2 = static_cast<float>(user_per);
         ImGui::SliderFloat("Delta", &f2, 0, 1);
         user_per = static_cast<double>(f2);
-        ImGui::SliderInt("Iteration Steps", &itSteps, 1, 200);
+        ImGui::SliderInt("Iteration Steps", &itSteps, 0, 500);
         // Mesh calculation
         if (ImGui::Button("Interpolate Mesh"))
         {
@@ -103,8 +103,33 @@ void interpCallback()
             ImGui::InputDouble("Weight", &w_fair);
             if (ImGui::Button("Compute Function Interpolation"))
             {
-                run_old_algorithm(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per,
-                                  true, user_delta, itSteps, w_fair);
+                run_old_algorithm(modelType, nbr_of_pts, SI_MESH_DIR, "", user_per, true,
+                                  user_delta, itSteps, w_fair);
+                // -------------------------------------------
+                // Read the mesh into polyscope
+                Eigen::MatrixXd verticies;
+                Eigen::MatrixXi faces;
+                std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
+                std::string model_filename =
+                    SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
+                igl::readOBJ(model_filename, verticies, faces);
+                polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
+                    "Interpolated Surface" + std::to_string(modelType), verticies, faces);
+                // -------------------------------------------
+                // Read the interpolated points into polyscope
+                std::string prefix_pts =
+                    "pts" + std::to_string(nbr_of_pts) + "_m_" + std::to_string(modelType) + ".obj";
+                std::string model_points = SI_MESH_DIR + prefix_pts;
+                Eigen::MatrixXd verticies_pts;
+                Eigen::MatrixXi faces_pts;
+                igl::readOBJ(model_points, verticies_pts, faces_pts);
+                polyscope::PointCloud *psPointCloud = polyscope::registerPointCloud(
+                    "Model" + std::to_string(modelType), verticies_pts);
+                // -------------------------------------------
+            }
+            if (ImGui::Button("Old Compute Function Interpolation"))
+            {
+                old(modelType, nbr_of_pts, user_delta, SI_MESH_DIR, "", user_per, false);
                 // -------------------------------------------
                 // Read the mesh into polyscope
                 Eigen::MatrixXd verticies;
