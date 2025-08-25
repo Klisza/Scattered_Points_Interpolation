@@ -795,6 +795,30 @@ Eigen::VectorXd lineSearch(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total
     return x;
 }
 
+void interpolating_routine(const std::string meshfile, const std::string tail, double delta,
+                           const double per, const int target_steps, const double w_fair,
+                           const bool meshInterpolation, const int nbr_pts, const int model)
+{
+    // Init important data
+    // Bsurface gets updated by other function.
+    Bsurface surface;
+    // Mesh variables / initialization
+    Eigen::MatrixXd ver;
+    int nbr;
+    Eigen::MatrixXi F;
+    Eigen::MatrixXd param;
+    bool corners = true;
+    if (meshInterpolation)
+        nbr = nbr_pts;
+    else
+    {
+        int method = model;
+        SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners,
+                                                      meshfile);
+    }
+    rescale_param(param);
+}
+
 void mesh_interpolation(std::string meshfile, double delta, const double per,
                         const int target_steps)
 {
@@ -1028,8 +1052,8 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
 
 // Optimized for all the variables using TinyAD as a autodifferenciation.
 void run_old_algorithm(const int model, const int nbr_pts, const std::string path,
-                       const std::string tail, const double per, const bool enable_local_energy,
-                       double &delta, const int target_steps, const double w_fair)
+                       const std::string tail, const double per, double &delta,
+                       const int target_steps, const double w_fair)
 {
     // Timer variables
     igl::Timer timer;
@@ -1271,8 +1295,7 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
         std::cout << "the dx, " << d.norm() << ", the backtraced dx " << (x - prev_x).norm()
                   << "\n";
         std::cout << "8" << std::endl;
-        // Reassigning the variables for next iteration
-        // surface.globVars = vec_to_list(x);
+        std::cout << "--- Done with iteration ---" << std::endl;
     }
 
     std::cout << "Done with optimization" << std::endl;
@@ -1283,40 +1306,44 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
 
-    std::vector<std::array<int, 2>> checkInterval(param_nbr, {0, 0});
+    // Code for debugging purposes.
+    // std::vector<std::array<int, 2>> checkInterval(param_nbr, {0, 0});
 
-    for (int i = 0; i < param_nbr; i++)
-    {
-        checkInterval[i][0] = intervalLocator(surface.U, surface.degree1,
-                                              x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)]);
-        checkInterval[i][1] = intervalLocator(surface.V, surface.degree2,
-                                              x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)]);
-        std::cout << "U,V: " << x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)] << " "
-                  << x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)] << std::endl;
-    }
-    Eigen::Vector3d vmin, vmax;
-    getBoundingBox(ver, vmin, vmax);
-    std::cout << "Bounding box: " << vmin.transpose() << " " << vmax.transpose() << std::endl;
-    for (int i = 0; i < checkInterval.size(); ++i)
-    {
-        if (checkInterval[i] != paraInInterval[i])
-        {
-            std::cout << "Intervals are not the same. Interavl index: " << i << " "
-                      << checkInterval[i][0] << " " << paraInInterval[i][0] << " "
-                      << checkInterval[i][1] << " " << paraInInterval[i][1] << std::endl;
-            std::cout << "u,v values: " << param(i, 0) << " " << param(i, 1) << std::endl;
-            std::cout << "u,v values from x: " << x(3 * surface.cpSize + i) << " "
-                      << x(3 * surface.cpSize + param_nbr + i) << std::endl;
-            std::cout << "Left and right boundaries of parameter i:"
-                      << surface.U[checkInterval[i][0]] << " " << surface.U[checkInterval[i][0] + 1]
-                      << " " << surface.U[paraInInterval[i][0]] << " "
-                      << surface.U[paraInInterval[i][0] + 1] << " "
-                      << surface.V[checkInterval[i][1]] << " " << surface.V[checkInterval[i][1] + 1]
-                      << " " << surface.V[paraInInterval[i][1]] << " "
-                      << surface.V[paraInInterval[i][1] + 1] << std::endl;
-            exit(0);
-        }
-    }
+    // for (int i = 0; i < param_nbr; i++)
+    // {
+    //     checkInterval[i][0] = intervalLocator(surface.U, surface.degree1,
+    //                                           x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)]);
+    //     checkInterval[i][1] = intervalLocator(surface.V, surface.degree2,
+    //                                           x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)]);
+    //     std::cout << "U,V: " << x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)] << " "
+    //               << x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)] << std::endl;
+    // }
+    // Eigen::Vector3d vmin, vmax;
+    // getBoundingBox(ver, vmin, vmax);
+    // std::cout << "Bounding box: " << vmin.transpose() << " " << vmax.transpose() << std::endl;
+    // for (int i = 0; i < checkInterval.size(); ++i)
+    // {
+    //     if (checkInterval[i] != paraInInterval[i])
+    //     {
+    //         std::cout << "Intervals are not the same. Interavl index: " << i << " "
+    //                   << checkInterval[i][0] << " " << paraInInterval[i][0] << " "
+    //                   << checkInterval[i][1] << " " << paraInInterval[i][1] << std::endl;
+    //         std::cout << "u,v values: " << param(i, 0) << " " << param(i, 1) << std::endl;
+    //         std::cout << "u,v values from x: " << x(3 * surface.cpSize + i) << " "
+    //                   << x(3 * surface.cpSize + param_nbr + i) << std::endl;
+    //         std::cout << "Left and right boundaries of parameter i:"
+    //                   << surface.U[checkInterval[i][0]] << " " << surface.U[checkInterval[i][0] +
+    //                   1]
+    //                   << " " << surface.U[paraInInterval[i][0]] << " "
+    //                   << surface.U[paraInInterval[i][0] + 1] << " "
+    //                   << surface.V[checkInterval[i][1]] << " " << surface.V[checkInterval[i][1] +
+    //                   1]
+    //                   << " " << surface.V[paraInInterval[i][1]] << " "
+    //                   << surface.V[paraInInterval[i][1] + 1] << std::endl;
+    //         exit(0);
+    //     }
+    // }
+
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
     int visual_nbr =
