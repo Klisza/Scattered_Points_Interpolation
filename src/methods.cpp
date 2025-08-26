@@ -1051,9 +1051,9 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
 }
 
 // Optimized for all the variables using TinyAD as a autodifferenciation.
-void run_old_algorithm(const int model, const int nbr_pts, const std::string path,
-                       const std::string tail, const double per, double &delta,
-                       const int target_steps, const double w_fair)
+void function_interpolation(const int model, const int nbr_pts, const std::string path,
+                            const std::string tail, const double per, double &delta,
+                            const int target_steps, const double w_fair)
 {
     // Timer variables
     igl::Timer timer;
@@ -1068,11 +1068,7 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
     Eigen::MatrixXd param;
     int method = model;
     bool corners = true;
-    // Try to write manual the sample parameter function to resemble the mesh processing as in the
-    // other function.
-    // SIBSplines::examples::input_parameters_get_model_sample_points(ver, F, param, method);
     SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path);
-    // mesh parametrization, and print out the parametrization result as a obj mesh.
     rescale_param(param);
     std::cout << "Parameters: \n" << param << std::endl;
     Eigen::MatrixXd param_old = param;
@@ -1099,14 +1095,7 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
     Eigen::MatrixXd SPs_old;
     Eigen::MatrixXi SFs_old;
     Bsurface new_surface = surface;
-    surface.surface_visulization(new_surface, 200, SPs_old, SFs_old);
-    polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
-        "Interpolated Surface (old alg)" + std::to_string(model), SPs_old, SFs_old);
-    write_points(path + "datapoints.obj", ver);
-    write_triangle_mesh(path + "mesh.obj", SPs_old, SFs_old);
 
-    polyscope::PointCloud *psPointCloud =
-        polyscope::registerPointCloud("Model_old" + std::to_string(model), ver);
     std::cout << "Control points initialized" << std::endl;
 
     // Init parameter intervals for reparameterization
@@ -1121,20 +1110,6 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
         paraInInterval[i][1] = intervalLocator(
             surface.V, surface.degree2,
             param(i, 1)); // return_closest_knot_index_to_param(surface.V, param(i, 1));
-    }
-    for (int i = 0; i < param.rows(); i++)
-    {
-        double u = param(i, 0);
-        double v = param(i, 1);
-        double ul = surface.U[paraInInterval[i][0]];
-        double ur = surface.U[paraInInterval[i][0] + 1];
-        double vl = surface.V[paraInInterval[i][1]];
-        double vr = surface.V[paraInInterval[i][1] + 1];
-        if (u < ul || u >= ur || v < vl || v >= vr)
-        {
-            std::cout << "error in intervals\n";
-            exit(0);
-        }
     }
     std::cout << "paraInterval size: " << paraInInterval.size() << std::endl;
 
@@ -1266,13 +1241,7 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
         std::cout << "Fitting energy: " << f_fit << std::endl;
         std::cout << "Fairing energy: " << f_fair << std::endl;
         std::cout << "4" << std::endl;
-        //  solver.sparsity_pattern_dirty = true;
         Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
-        // std::cout << "Default stepsize: " << d.norm() << std::endl;
-        //  the following variable "sparsity_pattern_dirty" can use the default value "false",
-        //  since our sparse matrices are all in the same structure.Thus we comment the following
-        //  command out.solver.sparsity_pattern_dirty = true;
-        //  this is crutial, since the patterns are always changing in eachiteration!
         std::cout << "5" << std::endl;
         d = stepBacktracker(d, paraInInterval, surface);
         std::cout << "Steptraced d: " << d.norm() << std::endl;
@@ -1305,44 +1274,6 @@ void run_old_algorithm(const int model, const int nbr_pts, const std::string pat
     surface.globVars = vec_to_list(x);
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
-
-    // Code for debugging purposes.
-    // std::vector<std::array<int, 2>> checkInterval(param_nbr, {0, 0});
-
-    // for (int i = 0; i < param_nbr; i++)
-    // {
-    //     checkInterval[i][0] = intervalLocator(surface.U, surface.degree1,
-    //                                           x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)]);
-    //     checkInterval[i][1] = intervalLocator(surface.V, surface.degree2,
-    //                                           x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)]);
-    //     std::cout << "U,V: " << x[variableMap(UDIR, PARAMETER, i, 0, 0, surface)] << " "
-    //               << x[variableMap(VDIR, PARAMETER, i, 0, 0, surface)] << std::endl;
-    // }
-    // Eigen::Vector3d vmin, vmax;
-    // getBoundingBox(ver, vmin, vmax);
-    // std::cout << "Bounding box: " << vmin.transpose() << " " << vmax.transpose() << std::endl;
-    // for (int i = 0; i < checkInterval.size(); ++i)
-    // {
-    //     if (checkInterval[i] != paraInInterval[i])
-    //     {
-    //         std::cout << "Intervals are not the same. Interavl index: " << i << " "
-    //                   << checkInterval[i][0] << " " << paraInInterval[i][0] << " "
-    //                   << checkInterval[i][1] << " " << paraInInterval[i][1] << std::endl;
-    //         std::cout << "u,v values: " << param(i, 0) << " " << param(i, 1) << std::endl;
-    //         std::cout << "u,v values from x: " << x(3 * surface.cpSize + i) << " "
-    //                   << x(3 * surface.cpSize + param_nbr + i) << std::endl;
-    //         std::cout << "Left and right boundaries of parameter i:"
-    //                   << surface.U[checkInterval[i][0]] << " " << surface.U[checkInterval[i][0] +
-    //                   1]
-    //                   << " " << surface.U[paraInInterval[i][0]] << " "
-    //                   << surface.U[paraInInterval[i][0] + 1] << " "
-    //                   << surface.V[checkInterval[i][1]] << " " << surface.V[checkInterval[i][1] +
-    //                   1]
-    //                   << " " << surface.V[paraInInterval[i][1]] << " "
-    //                   << surface.V[paraInInterval[i][1] + 1] << std::endl;
-    //         exit(0);
-    //     }
-    // }
 
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;

@@ -92,7 +92,7 @@ void interpCallback()
             }
             else
             {
-                std::cerr << "No mesh loaded";
+                std::cerr << "No mesh loaded" << std::endl;
             }
         }
         if (ImGui::TreeNode("Predefined Functions"))
@@ -103,18 +103,8 @@ void interpCallback()
             ImGui::InputDouble("Weight", &w_fair);
             if (ImGui::Button("Compute Function Interpolation"))
             {
-                run_old_algorithm(modelType, nbr_of_pts, SI_MESH_DIR, "", user_per, true,
-                                  user_delta, itSteps, w_fair);
-                // -------------------------------------------
-                // Read the mesh into polyscope
-                Eigen::MatrixXd verticies;
-                Eigen::MatrixXi faces;
-                std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
-                std::string model_filename =
-                    SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
-                igl::readOBJ(model_filename, verticies, faces);
-                polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
-                    "Interpolated Surface" + std::to_string(modelType), verticies, faces);
+                function_interpolation(modelType, nbr_of_pts, SI_MESH_DIR, "", user_per, user_delta,
+                                       itSteps, w_fair);
                 // -------------------------------------------
                 // Read the interpolated points into polyscope
                 std::string prefix_pts =
@@ -125,6 +115,20 @@ void interpCallback()
                 igl::readOBJ(model_points, verticies_pts, faces_pts);
                 polyscope::PointCloud *psPointCloud = polyscope::registerPointCloud(
                     "Model" + std::to_string(modelType), verticies_pts);
+                psPointCloud->setPointRadius(sphereSize);
+                psPointCloud->setPointRenderMode(polyscope::PointRenderMode::Sphere);
+                psPointCloud->resetTransform();
+                // -------------------------------------------
+                // Read the mesh into polyscope
+                Eigen::MatrixXd verticies;
+                Eigen::MatrixXi faces;
+                std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
+                std::string model_filename =
+                    SI_MESH_DIR + prefix + std::to_string(modelType) + ".obj";
+                igl::readOBJ(model_filename, verticies, faces);
+                polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
+                    "Interpolated Surface" + std::to_string(modelType), verticies, faces);
+                psSurfaceMesh->resetTransform();
                 // -------------------------------------------
             }
             if (ImGui::Button("Old Compute Function Interpolation"))
@@ -140,6 +144,7 @@ void interpCallback()
                 igl::readOBJ(model_filename, verticies, faces);
                 polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
                     "Interpolated Surface" + std::to_string(modelType), verticies, faces);
+                psSurfaceMesh->resetTransform();
                 // -------------------------------------------
                 // Read the interpolated points into polyscope
                 std::string prefix_pts =
@@ -151,6 +156,7 @@ void interpCallback()
                 polyscope::PointCloud *psPointCloud = polyscope::registerPointCloud(
                     "Model" + std::to_string(modelType), verticies_pts);
                 // -------------------------------------------
+                psPointCloud->resetTransform();
             }
             ImGui::TreePop();
         }
