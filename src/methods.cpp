@@ -502,29 +502,6 @@ int return_closest_knot_index_to_param(const std::vector<double> &UV, const doub
     return index - 1;
 }
 
-/*int intervalLocator(const std::vector<double> &U, const int p, double &uvalue)
-{
-    int nu = U.size() - 2 - p;
-    int uint = nu + 1 - p; // nbr of u intervals
-    if (uvalue >= U.back())
-    {
-        uvalue = 1 - SCALAR_ZERO;
-        return uint - 1 + p;
-    }
-    if (uvalue <= U.front())
-    {
-        return p;
-    }
-    for (int i = 0; i < uint; i++)
-    {
-        if (U[i + p] <= uvalue && U[i + p + 1] > uvalue)
-        {
-            return i + p;
-        }
-    }
-    return -1;
-}*/
-
 int parameterLocation(const bool Udirection, const int pos, const Bsurface &surface)
 {
     if (Udirection)
@@ -795,46 +772,34 @@ Eigen::VectorXd lineSearch(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total
     return x;
 }
 
-void interpolating_routine(const std::string meshfile, const std::string tail, double delta,
-                           const double per, const int target_steps, const double w_fair,
-                           const bool meshInterpolation, const int nbr_pts, const int model)
+// Inits the surface object
+void surface_init(const std::string meshfile, const std::string tail, double delta,
+                  const double per, const int target_steps, const double w_fair,
+                  const bool meshInterpolation, const int nbr_pts, const int model,
+                  Bsurface &surface)
 {
     // Init important data
     // Bsurface gets updated by other function.
-    Bsurface surface;
     // Mesh variables / initialization
     Eigen::MatrixXd ver;
     int nbr;
     Eigen::MatrixXi F;
     Eigen::MatrixXd param;
-    bool corners = true;
+
     if (meshInterpolation)
+    {
+        mesh_parameterization(meshfile, ver, param, F);
         nbr = nbr_pts;
+    }
     else
     {
+        bool corners = true;
         int method = model;
-        SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners,
+        SIBSplines::examples::get_model_sample_points(nbr_pts, ver, F, param, method, corners,
                                                       meshfile);
     }
     rescale_param(param);
-}
-
-void mesh_interpolation(std::string meshfile, double delta, const double per,
-                        const int target_steps)
-{
-    double precision = 0;
-    Eigen::MatrixXd ver;
-    Eigen::MatrixXi F;
-    Eigen::MatrixXd param;
-    std::cout << "reading mesh model: " << meshfile << std::endl;
-
-    // mesh parametrization, and print out the parametrization result as a obj mesh.
-    mesh_parameterization(meshfile, ver, param, F);
-    rescale_param(param);
     std::cout << "Parameters: \n" << param << std::endl;
-    // construct the surface object
-    Bsurface surface;
-    // set up the initial parameters.
     const int param_nbr = param.rows();     // the number of data points
     surface.degree1 = 3;                    // degree of u direction
     surface.degree2 = 3;                    // degree of v direction
@@ -852,7 +817,6 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
     std::cout << "Generating control points" << std::endl;
     surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
     std::cout << "Control points initialized" << std::endl;
-
     // Init parameter intervals for reparameterization
     std::vector<std::array<int, 2>> paraInInterval(param_nbr, {0, 0});
     // Perform binary search and return the element
@@ -876,12 +840,11 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
     // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
     const int varSize = 2 * param_nbr + 3 * surface.cpSize;
     // Init globVars vector
-    surface.cpRows = surface.control_points[0].size();
-    surface.cpCols = surface.control_points.size();
+    surface.cpRows = surface.control_points.size();
+    surface.cpCols = surface.control_points[0].size();
 
     surface.cpSize = surface.cpRows * surface.cpCols;
     // Adding control points to globVars
-    // Variable map is wrong
     surface.globVars.resize(varSize);
     std::cout << "Setting the control points to globVars" << std::endl;
     for (int k = 0; k < 3; ++k)
@@ -904,17 +867,19 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
             surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
         }
     }
+}
 
-    // Solve for the variables (parameters and control points) using the knot vectors.
-    std::cout << "Starting with TinyAD" << std::endl;
-    std::cout << "Var size: " << varSize << std::endl;
-    auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
-
+void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fair,
+                       const int itSteps, const std::vector<std::array<int, 2>> &paraInInterval,
+                       Eigen::MatrixXd &param)
+{
+    // write_csv(SI_MESH_DIR + "Energies", )
+    auto func = TinyAD::scalar_function<1>(TinyAD::range(surface.globVars.size()));
     // ##### Fitting energy ######
     // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
     // For degree 3 = 50 variables
     func.add_elements<50>(
-        TinyAD::range(param_nbr),
+        TinyAD::range(surface.paramSize),
         [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
         {
             using T = TINYAD_SCALAR_TYPE(element);
@@ -976,261 +941,16 @@ void mesh_interpolation(std::string meshfile, double delta, const double per,
         });
     TinyAD::LinearSolver solver;
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
-    double w_fair = 1e-4;
-    double w_fit = 1 - w_fair;
-    std::cout << "Starting with reparameterization" << std::endl;
-    for (int i = 0; i < target_steps; ++i)
-    {
-        std::cout << "1" << std::endl;
-        Eigen::VectorXd x = list_to_vec(surface.globVars);
-        // compute Hessian and gradient of the fitting error/energy
-        std::cout << "2" << std::endl;
-        auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
-        Eigen::VectorXd ones = Eigen::VectorXd::Ones(varSize);
-        SparseMatrixXd diag = 1e-6 * SparseMatrixXd(ones.asDiagonal());
-        H_fit_proj += diag;
-        std::cout << "3" << std::endl;
-        auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis, x);
-        Eigen::VectorXd g_total = w_fit * g_fit + w_fair * g_fair;
-        SparseMatrixXd H_total = H_fit_proj;
-        H_total *= w_fit;
-        H_total += w_fair * H_fair;
-        double f_total = w_fit * f_fit + w_fair * f_fair;
-
-        TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
-        std::cout << "4" << std::endl;
-        //  solver.sparsity_pattern_dirty = true;
-        Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
-        // the following variable "sparsity_pattern_dirty" can use the default value "false",
-        // since our sparse matrices are all in the same structure.Thus we comment the following
-        // command out.solver.sparsity_pattern_dirty = true;
-        // this is crutial, since the patterns are always changing in eachiteration!
-        std::cout << "5" << std::endl;
-        if (TinyAD::newton_decrement(d, g_total) <
-            convergence_eps) // if the direction is too far from the gradient direction, break.
-                             // normally this value is set as 1e-6
-            break;
-        std::cout << "6" << std::endl;
-        d = stepBacktracker(d, paraInInterval, surface);
-
-        std::cout << "7" << std::endl;
-        x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
-
-        if ((x - list_to_vec(surface.globVars)).norm() <
-            convergence_eps) // if the step is too small, break
-        {
-            std::cout << "break because the line searched step is too small: "
-                      << (x - list_to_vec(surface.globVars)).norm() << "\n";
-            break;
-        }
-        std::cout << "the dx, " << d.norm() << ", the backtraced dx "
-                  << (x - list_to_vec(surface.globVars)).norm() << "\n";
-        surface.globVars = vec_to_list(x);
-    }
-    std::cout << "Done with optimization" << std::endl;
-    /* ///////////////////////
-        Data Visualization
-    //////////////////////// */
-    reassign_control_points(surface, list_to_vec(surface.globVars));
-    Eigen::MatrixXd SPs;
-    Eigen::MatrixXi SFs;
-    int visual_nbr =
-        200; // the discretization scale for the output surface. The mesh will be 200x200
-    surface.surface_visulization(surface, visual_nbr, SPs, SFs);
-
-    precision = surface.max_interpolation_err(ver, param, surface);
-    std::cout << "maximal interpolation error "
-              << surface.max_interpolation_err(ver, param, surface) << std::endl;
-    write_points(meshfile + "pts" + std::to_string(param_nbr) + ".obj", ver);
-    write_triangle_mesh(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", SPs, SFs);
-    Eigen::MatrixXd verticies;
-    Eigen::MatrixXi faces;
-    igl::readOBJ(meshfile + "_intp_" + "p" + std::to_string(param_nbr) + ".obj", verticies, faces);
-    polyscope::SurfaceMesh *psSurfaceMesh =
-        polyscope::registerSurfaceMesh("Interpolated Surface", verticies, faces);
-}
-
-// Optimized for all the variables using TinyAD as a autodifferenciation.
-void function_interpolation(const int model, const int nbr_pts, const std::string path,
-                            const std::string tail, const double per, double &delta,
-                            const int target_steps, const double w_fair)
-{
-    // Timer variables
-    igl::Timer timer;
-    double time_knot = 0;
-    double time_solve = 0;
-    double precision = 0;
-
-    // Mesh variables / initialization
-    Eigen::MatrixXd ver;
-    int nbr = nbr_pts; // nbr of points
-    Eigen::MatrixXi F;
-    Eigen::MatrixXd param;
-    int method = model;
-    bool corners = true;
-    SIBSplines::examples::get_model_sample_points(nbr, ver, F, param, method, corners, path);
-    rescale_param(param);
-    std::cout << "Parameters: \n" << param << std::endl;
-    Eigen::MatrixXd param_old = param;
-    // construct the surface object
-    Bsurface surface;
-    // set up the initial parameters.
-    const int param_nbr = param.rows();     // the number of data points
-    surface.degree1 = 3;                    // degree of u direction
-    surface.degree2 = 3;                    // degree of v direction
-    surface.U = {{0, 0, 0, 0, 1, 1, 1, 1}}; // the initial U knot vector
-    surface.V = surface.U;                  // the initial V knot vector
-    bool enable_max_fix_nbr = true; // progressively update the knot vectors to make the two knot
-                                    // vectors balanced in length.
-    // generate knot vectors to make sure the data points can be interpolated
-    surface.generate_interpolation_knot_vectors(surface.degree1, surface.degree2, surface.U,
-                                                surface.V, param, delta, per, target_steps,
-                                                enable_max_fix_nbr);
-    write_svg_pts(path + "pts_before.svg", param);
-    std::cout << "knot vectors generated" << std::endl;
-    // Solve the control points as initialization.
-    PartialBasis basis(surface);
-    std::cout << "Generating control points" << std::endl;
-    surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
-    Eigen::MatrixXd SPs_old;
-    Eigen::MatrixXi SFs_old;
-    Bsurface new_surface = surface;
-
-    std::cout << "Control points initialized" << std::endl;
-
-    // Init parameter intervals for reparameterization
-    std::vector<std::array<int, 2>> paraInInterval(param_nbr, {0, 0});
-    // Perform binary search and return the element
-    std::cout << "Init parameter interval" << std::endl;
-    for (int i = 0; i < paraInInterval.size(); i++)
-    {
-        paraInInterval[i][0] = intervalLocator(
-            surface.U, surface.degree1,
-            param(i, 0)); // return_closest_knot_index_to_param(surface.U, param(i, 0));
-        paraInInterval[i][1] = intervalLocator(
-            surface.V, surface.degree2,
-            param(i, 1)); // return_closest_knot_index_to_param(surface.V, param(i, 1));
-    }
-    std::cout << "paraInterval size: " << paraInInterval.size() << std::endl;
-
-    //  Calculate the number of variables we solve for.
-    //  Number of control points
-    surface.paramSize = param_nbr;
-    surface.cpSize =
-        (surface.U.size() - 1 - surface.degree1) * (surface.V.size() - 1 - surface.degree2);
-    // Number of variables = 2 * parameters (u,v) + 3 * control points (x,y,z)
-    const int varSize = 2 * param_nbr + 3 * surface.cpSize;
-    // Init globVars vector
-    surface.cpRows = surface.control_points.size();
-    surface.cpCols = surface.control_points[0].size();
-
-    surface.cpSize = surface.cpRows * surface.cpCols;
-    // Adding control points to globVars
-    // Variable map is wrong
-    surface.globVars.resize(varSize);
-    std::cout << "Setting the control points to globVars" << std::endl;
-    for (int k = 0; k < 3; ++k)
-    {
-        for (int i = 0; i < surface.control_points.size(); ++i)
-        {
-            for (int j = 0; j < surface.control_points[0].size(); ++j)
-            {
-                // Index is k * cpSize + ith-cp
-                surface.globVars[k * surface.cpSize + i * surface.control_points[0].size() + j] =
-                    surface.control_points[i][j](k);
-                int currentID = k * surface.cpSize + i * surface.control_points[0].size() + j;
-            }
-        }
-    }
-    std::cout << "Setting parameters to globVars" << std::endl;
-    for (int k = 0; k < 2; ++k)
-    {
-        for (int i = 0; i < param.rows(); ++i)
-        {
-            surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
-        }
-    }
-
-    // Solve for the variables (parameters and control points) using the knot vectors.
-    std::cout << "Starting with TinyAD" << std::endl;
-    std::cout << "Var size: " << varSize << std::endl;
-    auto func = TinyAD::scalar_function<1>(TinyAD::range(varSize));
-
-    // ##### Fitting energy ######
-    // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
-    // For degree 3 = 50 variables
-    func.add_elements<50>(
-        TinyAD::range(param_nbr),
-        [&](auto &element) -> TINYAD_SCALAR_TYPE(element)
-        {
-            using T = TINYAD_SCALAR_TYPE(element);
-            Eigen::Index dataID = element.handle;
-            T parameterU =
-                element.variables(variableMap(UDIR, PARAMETER, dataID, 0, 0, surface))(0, 0);
-            T parameterV =
-                element.variables(variableMap(VDIR, PARAMETER, dataID, 0, 0, surface))(0, 0);
-
-            // get the uv intervals [U[uItv], U[uItv+1])
-            int uItv = paraInInterval[dataID][0];
-            int vItv = paraInInterval[dataID][1];
-            splineBasis<T, double, T> spb; // spline basis computation
-            // get the basis functions. basisU is a vector of size degree1 + 1 to represent a
-            // degree1 polynomial. each element of basisU is of tinyAD type variable
-            std::vector<T> basisU =
-                spb.computeBasisFunctionValues(parameterU, uItv, surface.degree1, surface.U);
-            std::vector<T> basisV =
-                spb.computeBasisFunctionValues(parameterV, vItv, surface.degree2, surface.V);
-
-            T p00 = 0, p01 = 0, p02 = 0;
-            for (int i = 0; i < surface.degree1 + 1; i++)
-            {
-                for (int j = 0; j < surface.degree2 + 1; j++)
-                {
-                    // for each interval [U[uItv], U[uItv + 1]), the associated control points are
-                    // P[uItv-degree],...,P[uItv]
-                    int lc0 = variableMap(false, CP, uItv - surface.degree1 + i,
-                                          vItv - surface.degree2 + j, 0,
-                                          surface); // getTheLocationOfThe(uItv-degree1+i,
-                                                    // vItv-degree2+j)-th ControlPoint_x;
-                    int lc1 = variableMap(false, CP, uItv - surface.degree1 + i,
-                                          vItv - surface.degree2 + j, 1,
-                                          surface); // getTheLocationOfThe(uItv-degree1+i,
-                                                    // vItv-degree2+j)-th ControlPoint_y;
-                    int lc2 = variableMap(false, CP, uItv - surface.degree1 + i,
-                                          vItv - surface.degree2 + j, 2,
-                                          surface); // getTheLocationOfThe(uItv-degree1+i,
-                                                    // vItv-degree2+j)-th ControlPoint_z;
-                    T pt0 = 0, pt1 = 0, pt2 = 0;
-                    //  get the control point
-                    pt0 = element.variables(lc0)(0, 0), pt1 = element.variables(lc1)(0, 0),
-                    pt2 = element.variables(lc2)(0, 0);
-
-                    p00 += pt0 * basisU[i] * basisV[j];
-                    p01 += pt1 * basisU[i] * basisV[j];
-                    p02 += pt2 * basisU[i] * basisV[j];
-                }
-            }
-            return (p00 - ver(dataID, 0)) * (p00 - ver(dataID, 0)) +
-                   (p01 - ver(dataID, 1)) * (p01 - ver(dataID, 1)) +
-                   (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
-        });
-    TinyAD::LinearSolver solver;
-    double convergence_eps = 1e-12; // change it into 1e-6 if you want.
     // const double w_fair = 1e-6;
     const double w_fit = 1 - w_fair;
     std::cout << "Starting with reparameterization" << std::endl;
     Eigen::VectorXd x = list_to_vec(surface.globVars);
-    for (int i = 0; i < 0; ++i)
+    for (int i = 0; i < itSteps; ++i)
     {
-        std::cout << "1" << std::endl;
-
-        std::cout << "2" << std::endl;
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
-        Eigen::VectorXd ones = Eigen::VectorXd::Ones(varSize);
+        Eigen::VectorXd ones = Eigen::VectorXd::Ones(surface.globVars.size());
         SparseMatrixXd diag = 1e-6 * SparseMatrixXd(ones.asDiagonal());
         H_fit_proj += diag;
-
-        std::cout << "3" << std::endl;
         auto [f_fair, g_fair, H_fair] = calculate_fairing_energy(surface, basis, x);
         Eigen::VectorXd g_total = w_fit * g_fit + w_fair * g_fair;
         SparseMatrixXd H_total = H_fit_proj;
@@ -1240,19 +960,14 @@ void function_interpolation(const int model, const int nbr_pts, const std::strin
         TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
         std::cout << "Fitting energy: " << f_fit << std::endl;
         std::cout << "Fairing energy: " << f_fair << std::endl;
-        std::cout << "4" << std::endl;
         Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
-        std::cout << "5" << std::endl;
         d = stepBacktracker(d, paraInInterval, surface);
         std::cout << "Steptraced d: " << d.norm() << std::endl;
 
-        std::cout << "6" << std::endl;
         if (TinyAD::newton_decrement(d, g_total) <
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
             break;
-
-        std::cout << "7" << std::endl;
         Eigen::VectorXd prev_x = x;
         x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
         if ((x - prev_x).norm() < convergence_eps) // if the step is too small, break
@@ -1264,33 +979,35 @@ void function_interpolation(const int model, const int nbr_pts, const std::strin
         std::cout << "the dx, " << d.norm() << ", the backtraced dx " << (x - prev_x).norm()
                   << "\n";
         std::cout << "8" << std::endl;
-        std::cout << "--- Done with iteration ---" << std::endl;
+        std::cout << "--- Done with iteration: " << i << " ---" << std::endl;
     }
-
-    std::cout << "Done with optimization" << std::endl;
-    /* ///////////////////////
-        Data Visualization
-    //////////////////////// */
     surface.globVars = vec_to_list(x);
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
+}
 
+void mesh_visualization(const Eigen::MatrixXd &param, const Eigen::MatrixXd &ver, Bsurface &surface,
+                        std::string path)
+{
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
     int visual_nbr =
         200; // the discretization scale for the output surface. The mesh will be 200x200
     surface.surface_visulization(surface, visual_nbr, SPs, SFs);
-    std::cout << "Parameter update: " << (param - param_old).norm() << std::endl;
-    precision = surface.max_interpolation_err(ver, param, surface);
+    double precision = surface.max_interpolation_err(ver, param, surface);
     std::cout << "maximal interpolation error "
               << surface.max_interpolation_err(ver, param, surface) << std::endl;
-    write_points(path + "pts" + std::to_string(nbr) + "_m_" + std::to_string(method) + ".obj", ver);
+    write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" + std::to_string(method) +
+                     ".obj",
+                 ver);
     write_svg_pts(path + "pts.svg", param);
     write_svg_knot_vectors(path + "knot_vectors.svg", surface.U, surface.V);
-    write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr) + "_m_" +
-                            std::to_string(method) + tail + ".obj",
+    write_triangle_mesh(path + "ours_" + "p" + std::to_string(surface.paramSize) + "_m_" +
+                            std::to_string(method) + ".obj",
                         SPs, SFs);
 }
+
+// Optimized for all the variables using TinyAD as a autodifferenciation.
 void old(const int model, const int nbr_pts, double &per_ours, const std::string path,
          const std::string tail, const double per, const bool enable_local_energy)
 {
