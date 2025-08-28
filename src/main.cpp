@@ -26,6 +26,9 @@ int modelType = 0;
 int nbr_of_pts = 100;
 double w_fair = 10e-6;
 std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
+Bsurface surface;
+PartialBasis basis(surface);
+bool surfaceInit = false;
 
 using namespace SIBSplines;
 std::string example_root_path(SI_MESH_DIR);
@@ -64,6 +67,7 @@ void interpCallback()
                 polyscope::PointCloud *psCloud = polyscope::registerPointCloud("mesh points", V);
                 psCloud->setPointRadius(sphereSize);
                 psCloud->setPointRenderMode(polyscope::PointRenderMode::Sphere);
+                surfaceInit = false;
             }
             else
             {
@@ -83,12 +87,23 @@ void interpCallback()
         ImGui::SliderFloat("Delta", &f2, 0, 1);
         user_per = static_cast<double>(f2);
         ImGui::SliderInt("Iteration Steps", &itSteps, 0, 500);
+        ImGui::InputDouble("Weight", &w_fair);
         // Mesh calculation
         if (ImGui::Button("Interpolate Mesh"))
         {
             if (!filename.empty())
             {
-                mesh_interpolation(filename, user_delta, user_per, itSteps);
+                Eigen::MatrixXd param;
+                std::vector<std::array<int, 2>> paraInInterval;
+                Eigen::MatrixXd V;
+                if (surfaceInit)
+                {
+
+                    surface_init(filename, "", user_delta, user_per, itSteps, w_fair, true, 100, -1,
+                                 surface, param, paraInInterval, V);
+                    surfaceInit = true;
+                }
+                mesh_optimization(surface, basis, w_fair, itSteps, paraInInterval, param, -1, V);
             }
             else
             {
@@ -98,13 +113,25 @@ void interpCallback()
         if (ImGui::TreeNode("Predefined Functions"))
         {
 
-            ImGui::SliderInt("Function Model", &modelType, 0, 5);
+            if (ImGui::SliderInt("Function Model", &modelType, 0, 5))
+            {
+                surfaceInit = false;
+            }
             ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
-            ImGui::InputDouble("Weight", &w_fair);
+
             if (ImGui::Button("Compute Function Interpolation"))
             {
-                function_interpolation(modelType, nbr_of_pts, SI_MESH_DIR, "", user_per, user_delta,
-                                       itSteps, w_fair);
+                Eigen::MatrixXd param;
+                std::vector<std::array<int, 2>> paraInInterval;
+                Eigen::MatrixXd V;
+                if (surfaceInit)
+                {
+                    surface_init("", "", user_delta, user_per, itSteps, w_fair, true, 100,
+                                 modelType, surface, param, paraInInterval, V);
+                    surfaceInit = true;
+                }
+                mesh_optimization(surface, basis, w_fair, itSteps, paraInInterval, param, modelType,
+                                  V);
                 // -------------------------------------------
                 // Read the interpolated points into polyscope
                 std::string prefix_pts =

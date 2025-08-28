@@ -776,7 +776,8 @@ Eigen::VectorXd lineSearch(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total
 void surface_init(const std::string meshfile, const std::string tail, double delta,
                   const double per, const int target_steps, const double w_fair,
                   const bool meshInterpolation, const int nbr_pts, const int model,
-                  Bsurface &surface)
+                  Bsurface &surface, Eigen::MatrixXd &param,
+                  std::vector<std::array<int, 2>> paraInInterval_orig, Eigen::MatrixXd &ver_orig)
 {
     // Init important data
     // Bsurface gets updated by other function.
@@ -784,7 +785,6 @@ void surface_init(const std::string meshfile, const std::string tail, double del
     Eigen::MatrixXd ver;
     int nbr;
     Eigen::MatrixXi F;
-    Eigen::MatrixXd param;
 
     if (meshInterpolation)
     {
@@ -867,12 +867,20 @@ void surface_init(const std::string meshfile, const std::string tail, double del
             surface.globVars[3 * surface.cpSize + k * param.rows() + i] = param(i, k);
         }
     }
+    paraInInterval_orig = std::move(paraInInterval);
+    ver_orig = ver;
 }
 
 void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fair,
                        const int itSteps, const std::vector<std::array<int, 2>> &paraInInterval,
-                       Eigen::MatrixXd &param)
+                       Eigen::MatrixXd &param, const int method, const Eigen::MatrixXd &ver)
 {
+    std::vector<double> data;
+    std::vector<double> d_f_fit, d_f_fair, d_f_total;
+    d_f_fit.reserve(itSteps);
+    d_f_fair.reserve(itSteps);
+    d_f_total.reserve(itSteps);
+
     // write_csv(SI_MESH_DIR + "Energies", )
     auto func = TinyAD::scalar_function<1>(TinyAD::range(surface.globVars.size()));
     // ##### Fitting energy ######
@@ -957,6 +965,9 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
         H_total *= w_fit;
         H_total += w_fair * H_fair;
         double f_total = w_fit * f_fit + w_fair * f_fair;
+        d_f_fit.push_back(f_fit);
+        d_f_fair.push_back(f_fair);
+        d_f_total.push_back(f_total);
         TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
         std::cout << "Fitting energy: " << f_fit << std::endl;
         std::cout << "Fairing energy: " << f_fair << std::endl;
@@ -984,10 +995,42 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
     surface.globVars = vec_to_list(x);
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
+    std::string path = SI_MESH_DIR;
+    std::vector<std::string> titles = {"f_fit", "f_fair", "f_total"};
+    std::vector<double> flat;
+    flat.reserve(3 * d_f_fit.size()); // optional performance hint
+    for (std::size_t i = 0; i < d_f_fit.size(); ++i)
+    {
+        flat.push_back(d_f_fit[i]);
+        flat.push_back(d_f_fair[i]);
+        flat.push_back(d_f_total[i]);
+    }
+    write_csv(path + "energies.csv", titles, data);
+    Eigen::MatrixXd SPs;
+    Eigen::MatrixXi SFs;
+    int visual_nbr =
+        200; // the discretization scale for the output surface. The mesh will be 200x200
+    surface.surface_visulization(surface, visual_nbr, SPs, SFs);
+    double precision = surface.max_interpolation_err(ver, param, surface);
+    std::cout << "maximal interpolation error "
+              << surface.max_interpolation_err(ver, param, surface) << std::endl;
+    if (method == -1)
+        write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" + +".obj", ver);
+    else
+    {
+        write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" +
+                         std::to_string(method) + ".obj",
+                     ver);
+        write_triangle_mesh(path + "ours_" + "p" + std::to_string(surface.paramSize) + "_m_" +
+                                std::to_string(method) + ".obj",
+                            SPs, SFs);
+    }
+    write_svg_pts(path + "pts.svg", param);
+    write_svg_knot_vectors(path + "knot_vectors.svg", surface.U, surface.V);
 }
 
 void mesh_visualization(const Eigen::MatrixXd &param, const Eigen::MatrixXd &ver, Bsurface &surface,
-                        std::string path)
+                        std::string path, const int method)
 {
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
@@ -997,14 +1040,19 @@ void mesh_visualization(const Eigen::MatrixXd &param, const Eigen::MatrixXd &ver
     double precision = surface.max_interpolation_err(ver, param, surface);
     std::cout << "maximal interpolation error "
               << surface.max_interpolation_err(ver, param, surface) << std::endl;
-    write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" + std::to_string(method) +
-                     ".obj",
-                 ver);
+    if (method == -1)
+        write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" + +".obj", ver);
+    else
+    {
+        write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" +
+                         std::to_string(method) + ".obj",
+                     ver);
+        write_triangle_mesh(path + "ours_" + "p" + std::to_string(surface.paramSize) + "_m_" +
+                                std::to_string(method) + ".obj",
+                            SPs, SFs);
+    }
     write_svg_pts(path + "pts.svg", param);
     write_svg_knot_vectors(path + "knot_vectors.svg", surface.U, surface.V);
-    write_triangle_mesh(path + "ours_" + "p" + std::to_string(surface.paramSize) + "_m_" +
-                            std::to_string(method) + ".obj",
-                        SPs, SFs);
 }
 
 // Optimized for all the variables using TinyAD as a autodifferenciation.
