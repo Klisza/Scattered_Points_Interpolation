@@ -15,26 +15,26 @@
 #include <sparse_interp/Types.hpp>
 
 using namespace SIBSplines;
-std::string root_path(SI_MESH_DIR);
-std::string filename;
-double sphereSize = 0.002;
-bool enablePolyGUI = true;
-double user_per = 0.5;
-double user_delta = 0.4; // ours
-int itSteps = 50;        // default
-int modelType = 0;
-int nbr_of_pts = 100;
-double w_fair = 10e-6;
-std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
-Bsurface surface;
-PartialBasis basis(surface);
-bool surfaceInit = false;
 
 using namespace SIBSplines;
 std::string example_root_path(SI_MESH_DIR);
 
 void interpCallback()
 {
+    static std::string root_path(SI_MESH_DIR);
+    static std::string filename;
+    static double sphereSize = 0.002;
+    static bool enablePolyGUI = true;
+    static double user_per = 0.5;
+    static double user_delta = 0.4; // ours
+    static int itSteps = 50;        // default
+    static int modelType = 0;
+    static int nbr_of_pts = 100;
+    static double w_fair = 10e-6;
+    static std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
+    static Bsurface surface;
+    static PartialBasis *basis = nullptr;
+    static bool surfaceInit = false;
     if (enablePolyGUI)
     {
         // polyscope::buildPickGui();
@@ -96,14 +96,14 @@ void interpCallback()
                 Eigen::MatrixXd param;
                 std::vector<std::array<int, 2>> paraInInterval;
                 Eigen::MatrixXd V;
-                if (surfaceInit)
+                if (!surfaceInit)
                 {
 
                     surface_init(filename, "", user_delta, user_per, itSteps, w_fair, true, 100, -1,
                                  surface, param, paraInInterval, V);
                     surfaceInit = true;
                 }
-                mesh_optimization(surface, basis, w_fair, itSteps, paraInInterval, param, -1, V);
+                mesh_optimization(surface, *basis, w_fair, itSteps, paraInInterval, param, -1, V);
             }
             else
             {
@@ -124,14 +124,17 @@ void interpCallback()
                 Eigen::MatrixXd param;
                 std::vector<std::array<int, 2>> paraInInterval;
                 Eigen::MatrixXd V;
-                if (surfaceInit)
+                if (!surfaceInit)
                 {
-                    surface_init("", "", user_delta, user_per, itSteps, w_fair, true, 100,
+                    std::cout << "1" << std::endl;
+                    std::cerr << "It crashes at surface init" << std::endl;
+                    surface_init("", "", user_delta, user_per, itSteps, w_fair, false, 100,
                                  modelType, surface, param, paraInInterval, V);
                     surfaceInit = true;
                 }
-                mesh_optimization(surface, basis, w_fair, itSteps, paraInInterval, param, modelType,
-                                  V);
+                std::cerr << "It crashes at mesh opt" << std::endl;
+                mesh_optimization(surface, *basis, w_fair, itSteps, paraInInterval, param,
+                                  modelType, V);
                 // -------------------------------------------
                 // Read the interpolated points into polyscope
                 std::string prefix_pts =
@@ -195,12 +198,13 @@ void interpCallback()
 
 int main(int argc, char *argv[])
 {
+    std::cerr << "Starting main..." << std::endl;
     polyscope::options::programName = "Surface Interpolation GUI";
     polyscope::options::autocenterStructures = true;
     polyscope::options::autoscaleStructures = true;
     polyscope::options::buildGui = false;
     polyscope::init();
-
+    std::cout << "Maybe crashes here" << std::endl;
     polyscope::state::userCallback = interpCallback;
 
     polyscope::show();

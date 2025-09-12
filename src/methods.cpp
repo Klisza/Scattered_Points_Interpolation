@@ -777,7 +777,8 @@ void surface_init(const std::string meshfile, const std::string tail, double del
                   const double per, const int target_steps, const double w_fair,
                   const bool meshInterpolation, const int nbr_pts, const int model,
                   Bsurface &surface, Eigen::MatrixXd &param,
-                  std::vector<std::array<int, 2>> paraInInterval_orig, Eigen::MatrixXd &ver_orig)
+                  std::vector<std::array<int, 2>> &paraInInterval_orig, // Add &
+                  Eigen::MatrixXd &ver_orig)
 {
     // Init important data
     // Bsurface gets updated by other function.
