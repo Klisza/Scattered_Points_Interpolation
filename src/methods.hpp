@@ -8,8 +8,8 @@ void surface_init(const std::string meshfile, const std::string tail, double del
                   Bsurface &surface, Eigen::MatrixXd &param,
                   std::vector<std::array<int, 2>> &paraInInterval_orig, // Add &
                   Eigen::MatrixXd &ver_orig);                           // Remove const, add &
-void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fair,
-                       const int itSteps, const std::vector<std::array<int, 2>> &paraInInterval,
+void mesh_optimization(Bsurface &surface, PartialBasis &basis, double w_fair, const int itSteps,
+                       const std::vector<std::array<int, 2>> &paraInInterval,
                        Eigen::MatrixXd &param, const int method, const Eigen::MatrixXd &ver);
 void mesh_visualization(const Eigen::MatrixXd &param, const Eigen::MatrixXd &ver, Bsurface &surface,
                         std::string path, const int method);

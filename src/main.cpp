@@ -33,7 +33,7 @@ void interpCallback()
     static double w_fair = 10e-6;
     static std::vector<std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> meshList;
     static Bsurface surface;
-    static PartialBasis *basis = nullptr;
+    static std::unique_ptr<PartialBasis> basis = nullptr;
     static bool surfaceInit = false;
     if (enablePolyGUI)
     {
@@ -98,16 +98,12 @@ void interpCallback()
                 Eigen::MatrixXd V;
                 if (!surfaceInit)
                 {
-
                     surface_init(filename, "", user_delta, user_per, itSteps, w_fair, true, 100, -1,
                                  surface, param, paraInInterval, V);
+                    basis = std::make_unique<PartialBasis>(surface); // Initialize here
                     surfaceInit = true;
                 }
                 mesh_optimization(surface, *basis, w_fair, itSteps, paraInInterval, param, -1, V);
-            }
-            else
-            {
-                std::cerr << "No mesh loaded" << std::endl;
             }
         }
         if (ImGui::TreeNode("Predefined Functions"))
@@ -117,22 +113,48 @@ void interpCallback()
             {
                 surfaceInit = false;
             }
-            ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300);
+            if (ImGui::SliderInt("Number of points", &nbr_of_pts, 10, 300))
+            {
+                surfaceInit = false;
+            }
 
             if (ImGui::Button("Compute Function Interpolation"))
             {
-                Eigen::MatrixXd param;
-                std::vector<std::array<int, 2>> paraInInterval;
-                Eigen::MatrixXd V;
+                static Eigen::MatrixXd param;
+                static std::vector<std::array<int, 2>> paraInInterval;
+                static Eigen::MatrixXd V;
                 if (!surfaceInit)
                 {
-                    std::cout << "1" << std::endl;
-                    std::cerr << "It crashes at surface init" << std::endl;
-                    surface_init("", "", user_delta, user_per, itSteps, w_fair, false, 100,
+                    surface_init("", "", user_delta, user_per, itSteps, w_fair, false, nbr_of_pts,
                                  modelType, surface, param, paraInInterval, V);
+                    basis = std::make_unique<PartialBasis>(surface);
                     surfaceInit = true;
+                    // -------------------------------------------
+                    // Read the interpolated points into polyscope
+                    std::string prefix_pts = "pts" + std::to_string(nbr_of_pts) + "_m_" +
+                                             std::to_string(modelType) + "_orig.obj";
+                    std::string model_points = SI_MESH_DIR + prefix_pts;
+                    Eigen::MatrixXd verticies_pts;
+                    Eigen::MatrixXi faces_pts;
+                    igl::readOBJ(model_points, verticies_pts, faces_pts);
+                    polyscope::PointCloud *psPointCloud = polyscope::registerPointCloud(
+                        "Model Orig" + std::to_string(modelType), verticies_pts);
+                    psPointCloud->setPointRadius(sphereSize);
+                    psPointCloud->setPointRenderMode(polyscope::PointRenderMode::Sphere);
+                    psPointCloud->resetTransform();
+                    // -------------------------------------------
+                    // Read the mesh into polyscope
+                    Eigen::MatrixXd verticies;
+                    Eigen::MatrixXi faces;
+                    std::string prefix = "ours_p" + std::to_string(nbr_of_pts) + "_m_";
+                    std::string model_filename =
+                        SI_MESH_DIR + prefix + std::to_string(modelType) + "_orig.obj";
+                    igl::readOBJ(model_filename, verticies, faces);
+                    polyscope::SurfaceMesh *psSurfaceMesh = polyscope::registerSurfaceMesh(
+                        "Interpolated Surface Orig" + std::to_string(modelType), verticies, faces);
+                    psSurfaceMesh->resetTransform();
+                    // -------------------------------------------
                 }
-                std::cerr << "It crashes at mesh opt" << std::endl;
                 mesh_optimization(surface, *basis, w_fair, itSteps, paraInInterval, param,
                                   modelType, V);
                 // -------------------------------------------

@@ -40,7 +40,7 @@ void write_control_pts(std::vector<std::vector<Vector3d>> &cps, std::string file
     fout.close();
 }
 
-void write_csv(const std::string &file, const std::vector<std::string> titles,
+/*void write_csv(const std::string &file, const std::vector<std::string> titles,
                const std::vector<double> data)
 {
     std::ofstream fout;
@@ -55,6 +55,52 @@ void write_csv(const std::string &file, const std::vector<std::string> titles,
         fout << data[i] << ",";
     }
     fout << data.back() << std::endl;
+    fout.close();
+}*/
+void write_csv(const std::string &file, const std::vector<std::string> titles,
+               const std::vector<double> data)
+{
+    std::ofstream fout;
+    fout.open(file);
+
+    if (!fout.is_open())
+    {
+        std::cerr << "Failed to open file: " << file << std::endl;
+        return;
+    }
+
+    // Write headers
+    for (size_t i = 0; i < titles.size(); ++i)
+    {
+        if (i > 0)
+            fout << ",";
+        fout << titles[i];
+    }
+    fout << std::endl;
+
+    // Write data - handle the case where we have multiple rows
+    if (data.empty())
+    {
+        std::cerr << "Warning: No data to write to CSV" << std::endl;
+        fout.close();
+        return;
+    }
+
+    // If data size is a multiple of titles size, write multiple rows
+    size_t cols = titles.size();
+    size_t rows = data.size() / cols;
+
+    for (size_t row = 0; row < rows; ++row)
+    {
+        for (size_t col = 0; col < cols; ++col)
+        {
+            if (col > 0)
+                fout << ",";
+            fout << data[row * cols + col];
+        }
+        fout << std::endl;
+    }
+
     fout.close();
 }
 
@@ -800,7 +846,6 @@ void surface_init(const std::string meshfile, const std::string tail, double del
                                                       meshfile);
     }
     rescale_param(param);
-    std::cout << "Parameters: \n" << param << std::endl;
     const int param_nbr = param.rows();     // the number of data points
     surface.degree1 = 3;                    // degree of u direction
     surface.degree2 = 3;                    // degree of v direction
@@ -817,6 +862,19 @@ void surface_init(const std::string meshfile, const std::string tail, double del
     PartialBasis basis(surface);
     std::cout << "Generating control points" << std::endl;
     surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
+    Eigen::MatrixXd SPs_orig;
+    Eigen::MatrixXi SFs_orig;
+    int visual_nbr =
+        200; // the discretization scale for the output surface. The mesh will be 200x200
+    surface.surface_visulization(surface, visual_nbr, SPs_orig, SFs_orig);
+    double precision = surface.max_interpolation_err(ver, param, surface);
+    std::string path = SI_MESH_DIR;
+    write_svg_pts(path + "orig_opt_pts.svg", param);
+    write_points(
+        path + "pts" + std::to_string(nbr_pts) + "_m_" + std::to_string(model) + "_orig.obj", ver);
+    write_triangle_mesh(path + "ours_" + "p" + std::to_string(nbr_pts) + "_m_" +
+                            std::to_string(model) + "_orig.obj",
+                        SPs_orig, SFs_orig);
     std::cout << "Control points initialized" << std::endl;
     // Init parameter intervals for reparameterization
     std::vector<std::array<int, 2>> paraInInterval(param_nbr, {0, 0});
@@ -826,12 +884,13 @@ void surface_init(const std::string meshfile, const std::string tail, double del
     {
         paraInInterval[i][0] = intervalLocator(
             surface.U, surface.degree1,
-            param(i, 0)); // return_closest_knot_index_to_param(surface.U, param(i, 0));
+            param(i,
+                  0)); // return_closest_knot_index_to_param(surface.U, param(i, 0));
         paraInInterval[i][1] = intervalLocator(
             surface.V, surface.degree2,
-            param(i, 1)); // return_closest_knot_index_to_param(surface.V, param(i, 1));
+            param(i,
+                  1)); // return_closest_knot_index_to_param(surface.V, param(i, 1));
     }
-    std::cout << "paraInterval size: " << paraInInterval.size() << std::endl;
 
     //  Calculate the number of variables we solve for.
     //  Number of control points
@@ -844,7 +903,6 @@ void surface_init(const std::string meshfile, const std::string tail, double del
     surface.cpRows = surface.control_points.size();
     surface.cpCols = surface.control_points[0].size();
 
-    surface.cpSize = surface.cpRows * surface.cpCols;
     // Adding control points to globVars
     surface.globVars.resize(varSize);
     std::cout << "Setting the control points to globVars" << std::endl;
@@ -872,8 +930,8 @@ void surface_init(const std::string meshfile, const std::string tail, double del
     ver_orig = ver;
 }
 
-void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fair,
-                       const int itSteps, const std::vector<std::array<int, 2>> &paraInInterval,
+void mesh_optimization(Bsurface &surface, PartialBasis &basis, double w_fair, const int itSteps,
+                       const std::vector<std::array<int, 2>> &paraInInterval,
                        Eigen::MatrixXd &param, const int method, const Eigen::MatrixXd &ver)
 {
     std::vector<double> data;
@@ -881,8 +939,6 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
     d_f_fit.reserve(itSteps);
     d_f_fair.reserve(itSteps);
     d_f_total.reserve(itSteps);
-
-    // write_csv(SI_MESH_DIR + "Energies", )
     auto func = TinyAD::scalar_function<1>(TinyAD::range(surface.globVars.size()));
     // ##### Fitting energy ######
     // (d+1)*(d+1) cps * 3 (x,y,z) + 2 parameters (u,v).
@@ -952,8 +1008,8 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
     double convergence_eps = 1e-12; // change it into 1e-6 if you want.
     // const double w_fair = 1e-6;
     const double w_fit = 1 - w_fair;
-    std::cout << "Starting with reparameterization" << std::endl;
     Eigen::VectorXd x = list_to_vec(surface.globVars);
+
     for (int i = 0; i < itSteps; ++i)
     {
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
@@ -969,17 +1025,16 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
         d_f_fit.push_back(f_fit);
         d_f_fair.push_back(f_fair);
         d_f_total.push_back(f_total);
-        TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
-        std::cout << "Fitting energy: " << f_fit << std::endl;
-        std::cout << "Fairing energy: " << f_fair << std::endl;
+        // TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
         Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
         d = stepBacktracker(d, paraInInterval, surface);
-        std::cout << "Steptraced d: " << d.norm() << std::endl;
+        // std::cout << "Steptraced d: " << d.norm() << std::endl;
 
         if (TinyAD::newton_decrement(d, g_total) <
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
             break;
+        w_fair = w_fair * 0.8;
         Eigen::VectorXd prev_x = x;
         x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
         if ((x - prev_x).norm() < convergence_eps) // if the step is too small, break
@@ -987,12 +1042,14 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
             std::cout << "break because the line searched step is too small: "
                       << (x - prev_x).norm() << "\n";
             break;
+            // w_fair = w_fair * 0.8;
         }
-        std::cout << "the dx, " << d.norm() << ", the backtraced dx " << (x - prev_x).norm()
-                  << "\n";
-        std::cout << "8" << std::endl;
-        std::cout << "--- Done with iteration: " << i << " ---" << std::endl;
+        // std::cout << "the dx, " << d.norm() << ", the backtraced dx " << (x - prev_x).norm()
+        //<< "\n";
+        // std::cout << "8" << std::endl;
+        // std::cout << "--- Done with iteration: " << i << " ---" << std::endl;
     }
+    std::cout << "Optimization done!" << std::endl;
     surface.globVars = vec_to_list(x);
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
@@ -1006,15 +1063,26 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
         flat.push_back(d_f_fair[i]);
         flat.push_back(d_f_total[i]);
     }
-    write_csv(path + "energies.csv", titles, data);
+
+    write_csv(path + std::to_string(method) + "energies.csv", titles, flat);
+
     Eigen::MatrixXd SPs;
     Eigen::MatrixXi SFs;
     int visual_nbr =
         200; // the discretization scale for the output surface. The mesh will be 200x200
     surface.surface_visulization(surface, visual_nbr, SPs, SFs);
     double precision = surface.max_interpolation_err(ver, param, surface);
-    std::cout << "maximal interpolation error "
-              << surface.max_interpolation_err(ver, param, surface) << std::endl;
+
+    // Write to separate CSV file
+    std::vector<std::string> precision_titles = {"model", "num_points", "w_fair", "iterations",
+                                                 "precision"};
+    std::vector<double> precision_data = {
+        static_cast<double>(method), static_cast<double>(surface.paramSize), w_fair,
+        static_cast<double>(d_f_fit.size()), // actual iterations performed
+        precision};
+    write_csv(path + "interpolation_errors.csv", precision_titles, precision_data);
+    // std::cout << "maximal interpolation error "
+    //           << precision << std::endl;
     if (method == -1)
         write_points(path + "pts" + std::to_string(surface.paramSize) + "_m_" + +".obj", ver);
     else
@@ -1026,7 +1094,7 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, const double w_fa
                                 std::to_string(method) + ".obj",
                             SPs, SFs);
     }
-    write_svg_pts(path + "pts.svg", param);
+    write_svg_pts(path + "opt_pts.svg", param);
     write_svg_knot_vectors(path + "knot_vectors.svg", surface.U, surface.V);
 }
 
