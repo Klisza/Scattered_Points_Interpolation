@@ -86,7 +86,7 @@ void interpCallback()
         float f2 = static_cast<float>(user_per);
         ImGui::SliderFloat("Delta", &f2, 0, 1);
         user_per = static_cast<double>(f2);
-        ImGui::SliderInt("Iteration Steps", &itSteps, 0, 500);
+        ImGui::SliderInt("Iteration Steps", &itSteps, 0, 2000);
         ImGui::InputDouble("Weight", &w_fair);
         // Mesh calculation
         if (ImGui::Button("Interpolate Mesh"))

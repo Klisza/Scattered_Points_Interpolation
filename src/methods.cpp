@@ -523,7 +523,7 @@ void splineBasis<Tp, knotT, valueT>::computeBasisFunctionDerivativeAndValues(
 // Rescales parameters from [a,b] -> [a+epsilon, b-epsilon]
 void rescale_param(Eigen::MatrixXd &param)
 {
-    double epsilon = 1e-6;
+    double epsilon = 0.05;
     for (int i = 0; i < param.rows(); i++)
     {
         for (int j = 0; j < 2; j++)
@@ -694,6 +694,43 @@ Eigen::VectorXd stepBacktracker(Eigen::VectorXd &d,
     }
     return d;
 }
+// this version only works when updating cp and para separately
+Eigen::VectorXd stepBacktracker_new(Eigen::VectorXd &d,
+                                    const std::vector<std::array<int, 2>> &paraInInterval,
+                                    Bsurface &surface)
+{
+    Eigen::VectorXd x = list_to_vec(surface.globVars);
+    double alphaAll = 1;
+    // U parameters
+    for (int i = 0; i < surface.paramSize; ++i)
+    {
+        // Get the lower and upper bounds for the current parameter
+        double upper = surface.U[paraInInterval[i][0] + 1];
+        double lower = surface.U[paraInInterval[i][0]];
+        double alpha = calculate_alpha(d, x, i + surface.cpSize * 3, upper, lower);
+        if (alpha < alphaAll)
+        {
+            alphaAll = alpha;
+        }
+        // d(i + surface.cpSize * 3) = alpha * d(i + surface.cpSize * 3);
+    }
+    // V parameters
+    for (int i = 0; i < surface.paramSize; ++i)
+    {
+        // Get the lower and upper bounds for the current parameter
+        double upper = surface.V[paraInInterval[i][1] + 1];
+        double lower = surface.V[paraInInterval[i][1]];
+        double alpha =
+            calculate_alpha(d, x, i + surface.cpSize * 3 + surface.paramSize, upper, lower);
+        if (alpha < alphaAll)
+        {
+            alphaAll = alpha;
+        }
+        // d(i + surface.cpSize * 3 + surface.paramSize) =
+        //     alpha * d(i + surface.cpSize * 3 + surface.paramSize);
+    }
+    return d * alphaAll;
+}
 
 void reassign_control_points(Bsurface &surface, const Eigen::VectorXd &x_new)
 {
@@ -777,7 +814,7 @@ template <typename EvalFunctionT>
 double eval_energy(const Eigen::VectorXd &x_new, Bsurface &surface, PartialBasis &basis,
                    EvalFunctionT &func, const double w_fair, SparseMatrixXd &matE30)
 {
-    double w_fit = 1 - w_fair;
+    double w_fit = 1;
     auto f_fit = func(x_new);
     double f_fair = x_new.dot(matE30 * x_new) / 2;
     return w_fair * f_fair + w_fit * f_fit;
@@ -798,7 +835,7 @@ Eigen::VectorXd lineSearch(Eigen::VectorXd x, Eigen::VectorXd d, double &f_total
     double armijo_const = 1e-4;
     double alpha = 1.0;
     double shrink = 0.8;
-    double f_old = f_total;
+    double f_old = eval_energy(x, surface, basis, func, w_fair, matE30);
     Eigen::VectorXd x_new;
     // Code crashes here.
     for (int i = 0; i < max_iters; ++i)
@@ -934,6 +971,7 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, double w_fair, co
                        const std::vector<std::array<int, 2>> &paraInInterval,
                        Eigen::MatrixXd &param, const int method, const Eigen::MatrixXd &ver)
 {
+    std::cout << "before opt, error " << surface.max_interpolation_err(ver, param, surface) << "\n";
     std::vector<double> data;
     std::vector<double> d_f_fit, d_f_fair, d_f_total;
     d_f_fit.reserve(itSteps);
@@ -1005,13 +1043,43 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, double w_fair, co
                    (p02 - ver(dataID, 2)) * (p02 - ver(dataID, 2));
         });
     TinyAD::LinearSolver solver;
-    double convergence_eps = 1e-12; // change it into 1e-6 if you want.
+    double convergence_eps = 1e-6;      // change it into 1e-6 if you want.
+    int shrinkTrigger = itSteps / 50;   // 0.8^42*1e-5 < 1e-9.
+    bool shrinkWhileNoSolution = false; // change it into true to have better smoothness.
     // const double w_fair = 1e-6;
-    const double w_fit = 1 - w_fair;
+    const double w_fit = 1;
     Eigen::VectorXd x = list_to_vec(surface.globVars);
+    const int rows = surface.control_points.size();
+    const int cols = surface.control_points[0].size();
+    const int cpSize = rows * cols;
+    const int paraSize = param.rows();
+    Eigen::VectorXd diag1 = Eigen::VectorXd::Zero(surface.globVars.size());
+    Eigen::VectorXd diag2 = diag1;
+    diag1.segment(0, cpSize * 3) = Eigen::VectorXd::Ones(cpSize * 3);
+    diag2.segment(cpSize * 3, paraSize * 2) = Eigen::VectorXd::Ones(paraSize * 2);
+    SparseMatrixXd MAT1 = SparseMatrixXd(diag1.asDiagonal()); // for updating cp
+    SparseMatrixXd MAT2 = SparseMatrixXd(diag2.asDiagonal()); // for updating paras
 
+    bool CpOpted = true, ParaOpted = true;
     for (int i = 0; i < itSteps; ++i)
     {
+        if (!shrinkWhileNoSolution)
+        {
+            if (i > shrinkTrigger * 7 && i % shrinkTrigger == 0)
+            {
+                w_fair *= 0.8;
+            }
+            if (w_fair < 1e-9)
+            {
+                w_fair = 0;
+            }
+        }
+
+        if (i % 2 == 0)
+        {
+            CpOpted = true;
+            ParaOpted = true;
+        }
         auto [f_fit, g_fit, H_fit_proj] = func.eval_with_hessian_proj(x);
         Eigen::VectorXd ones = Eigen::VectorXd::Ones(surface.globVars.size());
         SparseMatrixXd diag = 1e-6 * SparseMatrixXd(ones.asDiagonal());
@@ -1021,38 +1089,89 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, double w_fair, co
         SparseMatrixXd H_total = H_fit_proj;
         H_total *= w_fit;
         H_total += w_fair * H_fair;
+        // update H and g to disable some variables: H = MHM, g = Mg
+        if (i % 2 == 0) // update cp
+        // if (1)
+        {
+            H_total = MAT1 * H_total * MAT1;
+            g_total = MAT1 * g_total;
+        }
+        else // update paras
+        {
+            H_total = MAT2 * H_total * MAT2;
+            g_total = MAT2 * g_total;
+        }
+
         double f_total = w_fit * f_fit + w_fair * f_fair;
         d_f_fit.push_back(f_fit);
         d_f_fair.push_back(f_fair);
         d_f_total.push_back(f_total);
-        // TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
-        Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
+        TINYAD_DEBUG_OUT("Energy in iteration " << i << ": " << f_total);
+        std::cout << "ffit " << f_fit << " ffair " << f_fair << "\n";
+        // Eigen::VectorXd d = TinyAD::newton_direction(g_total, H_total, solver);
+        Eigen::VectorXd d = -g_total;
         d = stepBacktracker(d, paraInInterval, surface);
-        // std::cout << "Steptraced d: " << d.norm() << std::endl;
+        std::cout << "Steptraced d: " << d.norm() << std::endl;
 
         if (TinyAD::newton_decrement(d, g_total) <
             convergence_eps) // if the direction is too far from the gradient direction, break.
                              // normally this value is set as 1e-6
-            break;
-        w_fair = w_fair * 0.8;
+        {
+            if (shrinkWhileNoSolution)
+            {
+                w_fair = w_fair * 0.8;
+                std::cout << "lower weight " << w_fair << "\n";
+                if (w_fair < 1e-9 && w_fair > 0)
+                {
+                    w_fair = 0;
+                    continue;
+                }
+            }
+
+            if (w_fair == 0 && i % 2 == 0) // control point doesn't update
+            {
+                std::cout << "break because not in correct direction\n";
+                break;
+            }
+        }
+
+        // w_fair = w_fair * 0.8;
         Eigen::VectorXd prev_x = x;
         x = lineSearch(x, d, f_total, g_total, surface, basis, func, w_fair, H_fair);
+        std::cout << "step " << (x - prev_x).norm() << "\n";
         if ((x - prev_x).norm() < convergence_eps) // if the step is too small, break
         {
-            std::cout << "break because the line searched step is too small: "
-                      << (x - prev_x).norm() << "\n";
-            break;
+            if (shrinkWhileNoSolution)
+            {
+                w_fair = w_fair * 0.8;
+                std::cout << "lower weight " << w_fair << "\n";
+                if (w_fair < 1e-9 && w_fair > 0)
+                {
+                    w_fair = 0;
+                    continue;
+                }
+            }
+            if (w_fair == 0 && i % 2 == 0) // control point doesn't update
+            {
+                std::cout << "break because the line searched step is too small: "
+                          << (x - prev_x).norm() << "\n";
+                break;
+            }
+
             // w_fair = w_fair * 0.8;
         }
+        surface.globVars = vec_to_list(x);
         // std::cout << "the dx, " << d.norm() << ", the backtraced dx " << (x - prev_x).norm()
         //<< "\n";
         // std::cout << "8" << std::endl;
         // std::cout << "--- Done with iteration: " << i << " ---" << std::endl;
     }
-    std::cout << "Optimization done!" << std::endl;
+
+    std::cout << "Optimization done! final weight " << w_fair << std::endl;
     surface.globVars = vec_to_list(x);
     reassign_control_points(surface, list_to_vec(surface.globVars));
     reassign_parameters(surface, param, list_to_vec(surface.globVars));
+    // surface.solve_control_points_for_fairing_surface(surface, param, ver, basis);
     std::string path = SI_MESH_DIR;
     std::vector<std::string> titles = {"f_fit", "f_fair", "f_total"};
     std::vector<double> flat;
@@ -1072,6 +1191,7 @@ void mesh_optimization(Bsurface &surface, PartialBasis &basis, double w_fair, co
         200; // the discretization scale for the output surface. The mesh will be 200x200
     surface.surface_visulization(surface, visual_nbr, SPs, SFs);
     double precision = surface.max_interpolation_err(ver, param, surface);
+    std::cout << "max error " << precision << "\n";
 
     // Write to separate CSV file
     std::vector<std::string> precision_titles = {"model", "num_points", "w_fair", "iterations",
